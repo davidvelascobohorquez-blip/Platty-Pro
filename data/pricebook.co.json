@@ -1,0 +1,77 @@
+{
+  "metadata": {
+    "currency": "COP",
+    "unitBase": "kg/l/ud",
+    "version": "0.1"
+  },
+  "cityMultipliers": {
+    "Bogotá": 1.0,
+    "Medellín": 0.98,
+    "Cali": 0.99,
+    "Barranquilla": 1.02,
+    "Bucaramanga": 0.97,
+    "Cartagena": 1.04
+  },
+  "ingredients": {
+    "arroz": {
+      "unit": "kg",
+      "price": 3800
+    },
+    "pasta": {
+      "unit": "kg",
+      "price": 5200
+    },
+    "pollo pechuga": {
+      "unit": "kg",
+      "price": 14500
+    },
+    "tomate": {
+      "unit": "kg",
+      "price": 4500
+    },
+    "cebolla": {
+      "unit": "kg",
+      "price": 3600
+    },
+    "pimentón": {
+      "unit": "kg",
+      "price": 6800
+    },
+    "ajo": {
+      "unit": "kg",
+      "price": 16000
+    },
+    "zanahoria": {
+      "unit": "kg",
+      "price": 3200
+    },
+    "brocoli": {
+      "unit": "kg",
+      "price": 6900
+    },
+    "papa": {
+      "unit": "kg",
+      "price": 2500
+    },
+    "aceite": {
+      "unit": "l",
+      "price": 13000
+    },
+    "arepa": {
+      "unit": "ud",
+      "price": 1200
+    },
+    "queso": {
+      "unit": "kg",
+      "price": 22000
+    },
+    "tortilla": {
+      "unit": "ud",
+      "price": 900
+    },
+    "huevo": {
+      "unit": "ud",
+      "price": 600
+    }
+  }
+}
