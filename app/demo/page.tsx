@@ -1,713 +1,517 @@
 'use client'
 
-import { useMemo, useState, useEffect } from 'react'
+import React, { useMemo, useState } from 'react'
 import Brand from '@/components/Brand'
 import Button from '@/components/Button'
-import StepperDots from '@/components/StepperDots'
-import { pdf, Document, Page, Text, View, StyleSheet, Image as PDFImage } from '@react-pdf/renderer'
-import { site } from '@/site.config'
+import PlanPDF, { makePlanPdf } from '@/components/PlanPDF'
 
-/** =========================
- *  Tipos
- *  ========================= */
 type Unit = 'g' | 'ml' | 'ud'
 type ItemQty = { name: string; qty: number; unit: Unit; estCOP?: number }
-
-type StoreOpt = { nombre: string; tipo: 'hard-discount' | 'supermercado' }
 type Plan = {
   menu: { dia: number; plato: string; ingredientes: ItemQty[]; pasos: string[]; tip: string }[]
   lista: Record<string, ItemQty[]>
   batch: { baseA: string; baseB: string }
   sobrantes: string[]
-  meta: { ciudad: string; personas: number; modo: string; moneda?: 'COP' }
-  costos?: { porCategoria: Record<string, number>; total: number; nota: string }
-  tiendas?: { sugerida: StoreOpt; opciones: StoreOpt[]; mapsUrl: string }
+  meta: { ciudad: string; personas: number; modo: string; moneda: 'COP' }
+  costos: { porCategoria: Record<string, number>; total: number; nota: string }
 }
 
-type Meals = 'Desayunos' | 'Almuerzos' | 'Cenas'
-type Objetivo = 'Ahorrar' | 'Balanceado' | 'Alto en proteína' | 'Ligero'
-type Dieta = 'Ninguna' | 'Vegetariana' | 'Vegana' | 'Keto' | 'Sin gluten'
-type Equipo =
-  | 'Horno'
-  | 'Airfryer'
-  | 'Microondas'
-  | 'Licuadora'
-  | 'Olla a presión'
-  | 'Parrilla'
-  | 'Ninguno'
+const moneyCO = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 })
 
-/** =========================
- *  Utils
- *  ========================= */
-function fmtCOP(n?: number) {
-  if (typeof n !== 'number') return '-'
-  return n.toLocaleString('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 })
-}
-
-const fancyEasings = {
-  fadeIn: 'fadeIn .25s ease',
-}
-
-const styles = StyleSheet.create({
-  page: { padding: 32, fontSize: 12, fontFamily: 'Helvetica' },
-  h1: { fontSize: 22, marginBottom: 8 },
-  h2: { fontSize: 16, marginTop: 12, marginBottom: 6 },
-  small: { fontSize: 10, color: '#555' },
-  listItem: { marginBottom: 4 },
-  table: { marginTop: 6, borderWidth: 1, borderColor: '#dddddd', borderRadius: 6, overflow: 'hidden' },
-  tr: { flexDirection: 'row', alignItems: 'stretch' },
-  th: {
-    fontSize: 11,
-    fontFamily: 'Helvetica-Bold',
-    backgroundColor: '#f3f3f3',
-    paddingVertical: 6,
-    paddingHorizontal: 8,
-    borderRightWidth: 1,
-    borderRightColor: '#dddddd',
-  },
-  td: {
-    fontSize: 11,
-    paddingVertical: 6,
-    paddingHorizontal: 8,
-    borderTopWidth: 1,
-    borderTopColor: '#eeeeee',
-    borderRightWidth: 1,
-    borderRightColor: '#eeeeee',
-  },
-})
-
-/** =========================
- *  PDF
- *  ========================= */
-function PlanPDF({ plan }: { plan: Plan }) {
-  return (
-    <Document>
-      <Page size="A4" style={styles.page}>
-        <View style={{ alignItems: 'center', marginBottom: 12 }}>
-          {/* Ajusta el path de tu marca si la tienes en /public/brand */}
-          <PDFImage src="/brand/PLATY_wordmark_1800.png" style={{ width: 280 }} />
-        </View>
-
-        <Text style={styles.h1}>
-          Menú semanal — {plan.meta.ciudad} · {plan.meta.modo} · {plan.meta.personas} pers
-        </Text>
-        <Text style={styles.small}>Incluye lista consolidada, cantidades (g/ml/ud) y costo estimado.</Text>
-
-        <Text style={styles.h2}>Menú (Día 1–7)</Text>
-        {plan.menu.map((d) => (
-          <View key={d.dia} style={{ marginBottom: 8 }}>
-            <Text>• Día {d.dia}: {d.plato}</Text>
-            <Text>  Ingredientes: {d.ingredientes.map(i => `${i.qty} ${i.unit} ${i.name}`).join('; ')}</Text>
-            <Text>  Pasos: {d.pasos.join(' | ')}</Text>
-            <Text>  Tip: {d.tip}</Text>
-          </View>
-        ))}
-
-        <Text style={styles.h2}>Lista de compras (consolidada)</Text>
-        {Object.entries(plan.lista).map(([cat, items]) => (
-          <Text key={cat} style={styles.listItem}>
-            {cat}: {items.map((i) => `${i.qty} ${i.unit} ${i.name}`).join('; ')}
-          </Text>
-        ))}
-
-        {plan.costos && (
-          <>
-            <Text style={styles.h2}>Costo estimado</Text>
-            <View style={styles.table}>
-              <View style={styles.tr}>
-                <Text style={[styles.th, { flex: 2 }]}>Categoría</Text>
-                <Text style={[styles.th, { flex: 1, textAlign: 'right' }]}>Estimado (COP)</Text>
-              </View>
-              {Object.entries(plan.costos.porCategoria).map(([cat, val]) => (
-                <View key={cat} style={styles.tr}>
-                  <Text style={[styles.td, { flex: 2 }]}>{cat}</Text>
-                  <Text style={[styles.td, { flex: 1, textAlign: 'right' }]}>{fmtCOP(val)}</Text>
-                </View>
-              ))}
-              <View style={styles.tr}>
-                <Text style={[styles.td, { flex: 2, fontFamily: 'Helvetica-Bold' }]}>Total</Text>
-                <Text style={[styles.td, { flex: 1, textAlign: 'right', fontFamily: 'Helvetica-Bold' }]}>
-                  {fmtCOP(plan.costos.total)}
-                </Text>
-              </View>
-            </View>
-            <Text style={[styles.small, { marginTop: 4 }]}>{plan.costos.nota}</Text>
-          </>
-        )}
-
-        {plan.tiendas && (
-          <>
-            <Text style={styles.h2}>Dónde comprar (sugerido)</Text>
-            <Text>• Sugerido: {plan.tiendas.sugerida.nombre} ({plan.tiendas.sugerida.tipo})</Text>
-            <Text>• Alternativas: {plan.tiendas.opciones.map((o) => o.nombre).join(', ')}</Text>
-            <Text style={styles.small}>Búscalo en mapas: {plan.tiendas.mapsUrl}</Text>
-          </>
-        )}
-
-        <View
-          style={{
-            position: 'absolute',
-            bottom: 24,
-            left: 32,
-            right: 32,
-            flexDirection: 'row',
-            justifyContent: 'space-between',
-          }}
-        >
-          <Text style={styles.small}>
-            {site.brand} · wa.me/{site.whatsapp} · {site.domain}
-          </Text>
-          <PDFImage src="/brand/PLATY_logo_icon_1024.png" style={{ width: 28, height: 28 }} />
-        </View>
-      </Page>
-    </Document>
-  )
-}
-
-/** =========================
- *  Página
- *  ========================= */
 export default function DemoPage() {
-  // Pasos del wizard
-  const STEPS = [
-    'Ciudad',
-    'Comidas',
-    'Personas',
-    'Tiempo',
-    'Equipo',
-    'Preferencias',
-    'Presupuesto',
-    'Resumen',
-  ] as const
+  // ====== FORM STATE (wizard) ======
+  const [step, setStep] = useState<number>(1)
 
-  const [step, setStep] = useState(1)
-  const total = STEPS.length
-
-  // Estado de formulario
-  const [ciudad, setCiudad] = useState('Bogotá, CO')
-  const [comidas, setComidas] = useState<Meals[]>(['Almuerzos'])
+  const [ciudad, setCiudad] = useState('Bogotá')
   const [personas, setPersonas] = useState(2)
-  const [modo, setModo] = useState<'15 min' | '30 min' | '45 min' | '60 min'>('30 min')
-  const [equipo, setEquipo] = useState<Equipo[]>(['Microondas'])
-  const [dieta, setDieta] = useState<Dieta>('Ninguna')
+
+  const [tipoComida, setTipoComida] = useState<'Desayuno' | 'Almuerzo' | 'Cena'>('Almuerzo')
+  const [modo, setModo] = useState('30 min')
+  const [equipo, setEquipo] = useState<string[]>([]) // horno, airfryer, licuadora, olla presión...
+  const [dieta, setDieta] = useState<string>('Normal')
   const [alergias, setAlergias] = useState<string[]>([])
-  const [objetivo, setObjetivo] = useState<Objetivo>('Ahorrar')
-  const [presupuesto, setPresupuesto] = useState<number | ''>('' as any)
+  const [objetivo, setObjetivo] = useState<string>('Ahorro')
 
-  // Backend-expecting fields
-  const [prefs, setPrefs] = useState<string[]>(['Económico'])
-
-  // Resultado
-  const [plan, setPlan] = useState<Plan | null>(null)
-
-  // Estados de carga
+  // ====== RESULT STATE ======
   const [loadingPlan, setLoadingPlan] = useState(false)
-  const [loadingPDF, setLoadingPDF] = useState(false)
+  const [plan, setPlan] = useState<Plan | null>(null)
+  const [errorMsg, setErrorMsg] = useState<string | null>(null)
 
-  // Email
-  const [email, setEmail] = useState('')
-  const [sending, setSending] = useState(false)
+  const [makingPdf, setMakingPdf] = useState(false)
+  const [pdfUrl, setPdfUrl] = useState<string | null>(null)
 
-  // Resumen incremental visible
-  const [showLiveSummary, setShowLiveSummary] = useState(true)
+  const progressPct = useMemo(() => {
+    const total = 4
+    return Math.round((Math.min(step, total) - 1) / (total - 1) * 100)
+  }, [step])
 
-  // Progreso real (sin superponer en mobile)
-  useEffect(() => {
-    document.documentElement.style.setProperty('--safe-top', 'env(safe-area-inset-top)')
-  }, [])
-
-  // Helpers de multi-select
-  function toggleArray<T>(arr: T[], value: T): T[] {
-    return arr.includes(value) ? arr.filter((v) => v !== value) : [...arr, value]
-  }
-
-  // Prefs internas (mapeo rápido)
-  useEffect(() => {
-    const base: string[] = []
-    if (objetivo === 'Ahorrar') base.push('Económico')
-    if (dieta === 'Vegetariana') base.push('Vegetariano')
-    if (dieta === 'Vegana') base.push('Vegano')
-    if (dieta === 'Keto') base.push('Keto')
-    if (dieta === 'Sin gluten') base.push('Sin gluten')
+  const prefs = useMemo(() => {
+    // Enviamos señales útiles a la IA. El backend ignora campos desconocidos, pero "prefs" sí lo usa.
+    const base: string[] = [objetivo, tipoComida]
+    if (dieta !== 'Normal') base.push(dieta)
     if (alergias.length) base.push(`Alergias: ${alergias.join(', ')}`)
-    if (comidas.length && comidas.length < 3) base.push(`Solo ${comidas.join(' y ')}`)
-    setPrefs(base.length ? base : ['Económico'])
-  }, [objetivo, dieta, alergias, comidas])
+    if (equipo.length) base.push(`Equipo: ${equipo.join(', ')}`)
+    return base
+  }, [objetivo, tipoComida, dieta, alergias, equipo])
 
-  // Generar plan
-  async function generarPlan() {
+  async function handleGenerate() {
+    setErrorMsg(null)
     setLoadingPlan(true)
+    setPdfUrl(null)
     setPlan(null)
     try {
       const res = await fetch('/api/generate-menu', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           ciudad,
           personas,
           modo,
-          equipo: equipo.length ? equipo.join(', ') : 'Ninguno',
-          prefs, // pasa todo esto al prompt del backend/IA
-          // extras no obligatorios, por si luego backend los usa:
-          comidas,
-          dieta,
-          alergias,
-          objetivo,
-          presupuesto,
-        }),
+          equipo: equipo.length ? equipo.join(', ') : 'Básico',
+          prefs
+        })
       })
-      const data = await res.json()
-      if (data?.error) {
-        alert(data.error)
+
+      if (res.status === 402) {
+        const j = await res.json().catch(() => ({}))
+        setErrorMsg(j?.error || 'Has llegado al límite de pruebas gratis.')
         setLoadingPlan(false)
         return
       }
+
+      if (!res.ok) throw new Error('No pudimos generar el plan. Intenta de nuevo.')
+      const data: Plan = await res.json()
       setPlan(data)
-      setStep(total) // ir a resumen
-    } catch (e) {
-      alert('Uy… no pudimos generar el plan. Intenta de nuevo 🙏')
+      setStep(4)
+    } catch (e: any) {
+      setErrorMsg(e?.message || 'Ups, algo falló. Intenta otra vez.')
     } finally {
       setLoadingPlan(false)
     }
   }
 
-  // Descargar PDF (cliente)
-  async function descargarPDF() {
+  async function handleMakePdf() {
     if (!plan) return
-    setLoadingPDF(true)
     try {
-      const blob = await pdf(<PlanPDF plan={plan} />).toBlob()
+      setMakingPdf(true)
+      const { blob, filename } = await makePlanPdf(plan, {
+        ciudad,
+        tipoComida,
+        objective: objetivo
+      })
       const url = URL.createObjectURL(blob)
+      setPdfUrl(url)
+
+      // Disparar descarga inmediata (además de dejar preview):
       const a = document.createElement('a')
       a.href = url
-      a.download = `PLATY_menu_${plan.meta.ciudad}.pdf`
+      a.download = filename
       document.body.appendChild(a)
       a.click()
       a.remove()
-      URL.revokeObjectURL(url)
-    } catch (e) {
-      alert('No pudimos crear el PDF. Intenta otra vez.')
     } finally {
-      setLoadingPDF(false)
+      setMakingPdf(false)
     }
   }
-
-  // WhatsApp share
-  const whatsUrl = useMemo(() => {
-    if (!plan) return '#'
-    const totalTxt = plan.costos?.total ? ` · Total aprox: ${fmtCOP(plan.costos.total)}` : ''
-    const msg = `Menú semanal ${site.brand} — ${plan.meta.ciudad} · ${plan.meta.modo} · ${plan.meta.personas} pers${totalTxt}. Incluye cantidades y costo estimado por ciudad. Ver en ${site.domain}`
-    return `https://wa.me/?text=${encodeURIComponent(msg)}`
-  }, [plan])
-
-  // Email
-  async function enviarEmail() {
-    if (!plan || !email) return
-    setSending(true)
-    try {
-      const res = await fetch('/api/send-email', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, plan }),
-      })
-      const j = await res.json()
-      alert(j.ok ? 'Enviado ✅ Revisa tu correo.' : `No se pudo enviar: ${j.error || 'Error'}`)
-    } catch (e: any) {
-      alert('Error enviando email')
-    } finally {
-      setSending(false)
-    }
-  }
-
-  const categoriaCards = useMemo(() => {
-    if (!plan?.lista) return []
-    const entries = Object.entries(plan.lista)
-    return entries.map(([cat, items]) => {
-      const totalCat = (plan.costos?.porCategoria?.[cat] ?? 0) as number
-      return { cat, items, totalCat }
-    })
-  }, [plan])
-
-  const showResumen = step >= 1 && showLiveSummary
 
   return (
     <main className="container py-8">
       {/* HEADER */}
-      <div className="flex items-center justify-between mb-5">
-        <div className="flex items-center gap-3">
-          <Brand />
-          <div className="hidden sm:block text-xs text-stone">Demo · Personaliza y genera tu PDF</div>
+      <header className="flex items-center justify-between mb-6">
+        <Brand />
+        <div className="hidden sm:block text-sm text-stone">Demo</div>
+      </header>
+
+      {/* PROGRESS */}
+      <div className="mb-8">
+        <div className="flex items-center justify-between text-sm text-stone mb-1">
+          <span>Paso {Math.min(step, 4)} de 4</span>
+          <span>{progressPct}%</span>
         </div>
-        <div className="min-w-[120px] flex justify-end">
-          <StepperDots step={Math.min(step, total)} total={total} />
+        <div className="h-2 rounded-full bg-line overflow-hidden">
+          <div
+            className="h-2 bg-amber rounded-full transition-all"
+            style={{ width: `${progressPct}%` }}
+          />
         </div>
       </div>
 
-      {/* VOLVER */}
-      {step > 1 && step < total && (
-        <button
-          onClick={() => setStep((s) => Math.max(1, s - 1))}
-          className="mb-4 inline-flex items-center gap-2 text-sm text-graphite hover:text-charcoal transition-colors"
-          aria-label="Volver al paso anterior"
-        >
-          <span aria-hidden>←</span> Volver
-        </button>
-      )}
-
       {/* WIZARD */}
-      {step < total && (
-        <div className="grid md:grid-cols-2 gap-6" style={{ animation: fancyEasings.fadeIn }}>
-          {/* Paso activo */}
-          <div className="bg-card rounded-3xl shadow-soft border border-line p-6">
-            {step === 1 && (
-              <>
-                <h2 className="text-2xl font-bold">¿En qué ciudad/país estás?</h2>
-                <p className="text-sm text-stone mt-1">
-                  Usamos tu ciudad para estimar <strong>precios locales</strong> y sugerir tiendas cercanas.
-                </p>
-                <input
-                  className="mt-4 w-full rounded-2xl border border-line px-4 py-3"
-                  value={ciudad}
-                  onChange={(e) => setCiudad(e.target.value)}
-                  placeholder="Ej: Bogotá, CO"
-                />
-                <div className="mt-6"><Button onClick={() => setStep(2)}>Siguiente</Button></div>
-              </>
-            )}
+      <div className="grid lg:grid-cols-3 gap-6">
+        {/* LEFT: Steps */}
+        <section className="lg:col-span-2">
+          {/* STEP 1 */}
+          {step === 1 && (
+            <Card>
+              <h2 className="text-2xl font-bold">¿Dónde y para cuántas personas?</h2>
+              <p className="text-graphite mt-1">Con esto calculamos cantidades y precios locales.</p>
 
-            {step === 2 && (
-              <>
-                <h2 className="text-2xl font-bold">¿Qué comidas quieres planear?</h2>
-                <p className="text-sm text-stone mt-1">Puedes elegir <strong>una o varias</strong> (armamos 7 días igual).</p>
-                <div className="mt-4 flex flex-wrap gap-2">
-                  {(['Desayunos', 'Almuerzos', 'Cenas'] as Meals[]).map((m) => {
-                    const on = comidas.includes(m)
-                    return (
-                      <button
-                        key={m}
-                        onClick={() => setComidas((arr) => toggleArray(arr, m))}
-                        className={`px-4 py-2 rounded-2xl border transition-colors ${
-                          on ? 'bg-amber border-amber text-charcoal' : 'border-line hover:border-amber'
-                        }`}
-                      >
-                        {m}
-                      </button>
-                    )
-                  })}
-                </div>
-                <div className="mt-6"><Button onClick={() => setStep(3)}>Siguiente</Button></div>
-              </>
-            )}
+              <div className="mt-6 grid sm:grid-cols-2 gap-4">
+                <Labeled label="Ciudad">
+                  <input
+                    className="input"
+                    value={ciudad}
+                    onChange={(e) => setCiudad(e.target.value)}
+                    placeholder="Ej: Bogotá, Medellín…"
+                  />
+                </Labeled>
+                <Labeled label="Personas que comen">
+                  <input
+                    type="number"
+                    min={1}
+                    className="input"
+                    value={personas}
+                    onChange={(e) => setPersonas(Math.max(1, Number(e.target.value)))}
+                  />
+                </Labeled>
+              </div>
 
-            {step === 3 && (
-              <>
-                <h2 className="text-2xl font-bold">¿Para cuántas personas?</h2>
-                <p className="text-sm text-stone mt-1">
-                  Escalamos cantidades (g/ml/ud) y consolidamos compras para evitar desperdicios.
-                </p>
-                <div className="mt-4 flex flex-wrap gap-2">
-                  {[1, 2, 3, 4, 5, 6, 7, 8].map((n) => (
-                    <button
-                      key={n}
-                      onClick={() => setPersonas(n)}
-                      className={`px-4 py-2 rounded-2xl border transition-colors ${
-                        personas === n ? 'bg-amber border-amber text-charcoal' : 'border-line hover:border-amber'
-                      }`}
-                    >
-                      {n}
-                    </button>
-                  ))}
-                </div>
-                <div className="mt-6"><Button onClick={() => setStep(4)}>Siguiente</Button></div>
-              </>
-            )}
+              <div className="mt-6 flex justify-end gap-3">
+                <Button onClick={() => setStep(2)}>Siguiente</Button>
+              </div>
+            </Card>
+          )}
 
-            {step === 4 && (
-              <>
-                <h2 className="text-2xl font-bold">¿Cuánto tiempo quieres invertir?</h2>
-                <p className="text-sm text-stone mt-1">Elige <strong>una</strong> opción. Afecta la dificultad y técnica.</p>
-                <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-2">
-                  {(['15 min', '30 min', '45 min', '60 min'] as const).map((m) => (
-                    <button
-                      key={m}
-                      onClick={() => setModo(m)}
-                      className={`px-4 py-2 rounded-2xl border transition-colors ${
-                        modo === m ? 'bg-amber border-amber text-charcoal' : 'border-line hover:border-amber'
-                      }`}
-                    >
-                      {m}
-                    </button>
-                  ))}
-                </div>
-                <div className="mt-6"><Button onClick={() => setStep(5)}>Siguiente</Button></div>
-              </>
-            )}
+          {/* STEP 2 */}
+          {step === 2 && (
+            <Card>
+              <h2 className="text-2xl font-bold">¿Qué comida, tiempo y equipo?</h2>
+              <p className="text-graphite mt-1">
+                Tiempo = cuánto quieres invertir cocinando. Equipo = electrodomésticos/herramientas que tienes.
+              </p>
 
-            {step === 5 && (
-              <>
-                <h2 className="text-2xl font-bold">¿Qué equipo tienes?</h2>
-                <p className="text-sm text-stone mt-1">Puedes seleccionar <strong>varios</strong>. Adaptamos técnicas y recetas.</p>
-                <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 gap-2">
-                  {(['Horno','Airfryer','Microondas','Licuadora','Olla a presión','Parrilla','Ninguno'] as Equipo[]).map((m) => {
-                    const on = equipo.includes(m)
-                    return (
-                      <button
-                        key={m}
-                        onClick={() => setEquipo((arr) => toggleArray(arr, m))}
-                        className={`px-4 py-2 rounded-2xl border transition-colors ${
-                          on ? 'bg-amber border-amber text-charcoal' : 'border-line hover:border-amber'
-                        }`}
-                      >
-                        {m}
-                      </button>
-                    )
-                  })}
-                </div>
-                <div className="mt-6"><Button onClick={() => setStep(6)}>Siguiente</Button></div>
-              </>
-            )}
-
-            {step === 6 && (
-              <>
-                <h2 className="text-2xl font-bold">Preferencias y alergias</h2>
-                <p className="text-sm text-stone mt-1">
-                  Selecciona <strong>dieta</strong> y marca alergias (si aplica). Esto guía al planificador.
-                </p>
-                <div className="mt-4">
-                  <div className="text-sm font-semibold mb-2">Dieta</div>
-                  <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
-                    {(['Ninguna','Vegetariana','Vegana','Keto','Sin gluten'] as Dieta[]).map(d => (
-                      <button
-                        key={d}
-                        onClick={() => setDieta(d)}
-                        className={`px-4 py-2 rounded-2xl border transition-colors ${
-                          dieta === d ? 'bg-amber border-amber text-charcoal' : 'border-line hover:border-amber'
-                        }`}
-                      >
-                        {d}
-                      </button>
+              <div className="mt-6 grid gap-4 md:grid-cols-2">
+                <Labeled label="Tipo de comida">
+                  <div className="flex gap-2 flex-wrap">
+                    {(['Desayuno', 'Almuerzo', 'Cena'] as const).map((t) => (
+                      <Chip key={t} active={tipoComida === t} onClick={() => setTipoComida(t)}>{t}</Chip>
                     ))}
                   </div>
-                </div>
+                </Labeled>
 
-                <div className="mt-4">
-                  <div className="text-sm font-semibold mb-2">Alergias / evita</div>
-                  <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
-                    {['Lácteos','Gluten','Mariscos','Frutos secos','Picante'].map(a => {
-                      const on = alergias.includes(a)
+                <Labeled label="Tiempo de cocina">
+                  <select className="input" value={modo} onChange={(e) => setModo(e.target.value)}>
+                    <option>15 min</option>
+                    <option>30 min</option>
+                    <option>45 min</option>
+                    <option>60 min</option>
+                  </select>
+                </Labeled>
+
+                <Labeled label="Equipo disponible">
+                  <div className="flex gap-2 flex-wrap">
+                    {['Horno', 'Airfryer', 'Licuadora', 'Olla a presión', 'Sartén/Wok', 'Arrocera'].map((eq) => {
+                      const on = equipo.includes(eq)
                       return (
-                        <button
-                          key={a}
-                          onClick={() => setAlergias(arr => toggleArray(arr, a))}
-                          className={`px-4 py-2 rounded-2xl border transition-colors ${
-                            on ? 'bg-amber border-amber text-charcoal' : 'border-line hover:border-amber'
-                          }`}
+                        <Chip
+                          key={eq}
+                          active={on}
+                          onClick={() =>
+                            setEquipo((cur) => (on ? cur.filter((x) => x !== eq) : [...cur, eq]))
+                          }
                         >
-                          {a}
-                        </button>
+                          {eq}
+                        </Chip>
                       )
                     })}
                   </div>
-                </div>
-
-                <div className="mt-6"><Button onClick={() => setStep(7)}>Siguiente</Button></div>
-              </>
-            )}
-
-            {step === 7 && (
-              <>
-                <h2 className="text-2xl font-bold">Objetivo & presupuesto</h2>
-                <p className="text-sm text-stone mt-1">
-                  Ajustamos ingredientes y técnicas según tu meta. El presupuesto ayuda a priorizar.
-                </p>
-                <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-2">
-                  {(['Ahorrar','Balanceado','Alto en proteína','Ligero'] as Objetivo[]).map(o => (
-                    <button
-                      key={o}
-                      onClick={() => setObjetivo(o)}
-                      className={`px-4 py-2 rounded-2xl border transition-colors ${
-                        objetivo === o ? 'bg-amber border-amber text-charcoal' : 'border-line hover:border-amber'
-                      }`}
-                    >
-                      {o}
-                    </button>
-                  ))}
-                </div>
-
-                <div className="mt-4">
-                  <label className="text-sm text-stone">Presupuesto semanal (opcional, COP)</label>
-                  <input
-                    type="number"
-                    inputMode="numeric"
-                    className="mt-2 w-full rounded-2xl border border-line px-4 py-3"
-                    value={presupuesto}
-                    onChange={(e) => setPresupuesto(e.target.value ? Number(e.target.value) : '')}
-                    placeholder="Ej: 120000"
-                  />
-                </div>
-
-                <div className="mt-6 flex flex-wrap gap-3">
-                  <Button onClick={() => setStep(8)} variant="secondary">Ver resumen</Button>
-                  <Button onClick={generarPlan}>Confirmar y generar plan</Button>
-                </div>
-
-                {/* hint de carga */}
-                {loadingPlan && (
-                  <p className="text-xs text-stone mt-2">Estamos cocinando tu plan… puede tardar unos segundos 🍳</p>
-                )}
-              </>
-            )}
-          </div>
-
-          {/* Resumen en vivo (columna derecha) */}
-          {showResumen && (
-            <div className="bg-card rounded-3xl shadow-soft border border-line p-6">
-              <div className="flex items-center justify-between">
-                <h3 className="text-xl font-bold">Resumen</h3>
-                <button
-                  className="text-xs underline decoration-amber underline-offset-4"
-                  onClick={() => setShowLiveSummary((v) => !v)}
-                >
-                  {showLiveSummary ? 'Ocultar' : 'Mostrar'}
-                </button>
+                </Labeled>
               </div>
-              <ul className="mt-3 text-graphite text-sm leading-6">
-                <li><strong>Ciudad:</strong> {ciudad || '—'}</li>
-                <li><strong>Comidas:</strong> {comidas.length ? comidas.join(', ') : '—'}</li>
-                <li><strong>Personas:</strong> {personas}</li>
-                <li><strong>Tiempo:</strong> {modo}</li>
-                <li><strong>Equipo:</strong> {equipo.length ? equipo.join(', ') : '—'}</li>
-                <li><strong>Dieta:</strong> {dieta}</li>
-                <li><strong>Alergias:</strong> {alergias.length ? alergias.join(', ') : '—'}</li>
-                <li><strong>Objetivo:</strong> {objetivo}</li>
-                <li><strong>Presupuesto:</strong> {presupuesto ? fmtCOP(presupuesto) : '—'}</li>
-              </ul>
-              <p className="text-xs text-stone mt-3">
-                Generaremos 7 {comidas.length === 1 ? comidas[0].toLowerCase() : 'días'}
-                {' '}con cantidades exactas, lista consolidada y costo estimado por ciudad.
-              </p>
-            </div>
+
+              <div className="mt-6 flex justify-between">
+                <Button variant="ghost" onClick={() => setStep(1)}>Volver</Button>
+                <Button onClick={() => setStep(3)}>Siguiente</Button>
+              </div>
+            </Card>
           )}
-        </div>
-      )}
 
-      {/* RESULTADO */}
-      {step === total && plan && (
-        <div className="grid gap-6" style={{ animation: fancyEasings.fadeIn }}>
-          {/* Encabezado */}
-          <div className="bg-card rounded-3xl shadow-soft border border-line p-6 flex items-center justify-between flex-wrap gap-2">
-            <div>
-              <h2 className="text-2xl font-extrabold">Tu menú semanal</h2>
-              <p className="text-sm text-stone">
-                {plan.meta.ciudad} · {plan.meta.modo} · {plan.meta.personas} pers
-              </p>
-            </div>
-            <div className="flex gap-2">
-              <a href={whatsUrl} target="_blank" rel="noreferrer">
-                <Button variant="secondary">Compartir WhatsApp</Button>
-              </a>
-              <Button onClick={descargarPDF} disabled={loadingPDF}>
-                {loadingPDF ? 'Generando PDF…' : 'Descargar PDF'}
-              </Button>
-            </div>
-          </div>
+          {/* STEP 3 */}
+          {step === 3 && (
+            <Card>
+              <h2 className="text-2xl font-bold">Preferencias y restricciones</h2>
+              <p className="text-graphite mt-1">Para variar el menú sin dramas.</p>
 
-          {/* Vista previa: resumen por categoría */}
-          {plan.lista && (
-            <div className="bg-card rounded-3xl shadow-soft border border-line p-6">
-              <h3 className="text-xl font-bold">Resumen de compras por categoría</h3>
-              <p className="text-sm text-stone">
-                Perfecto para ir directo al pasillo correcto. Totales incluyen <strong>precios estimados</strong>.
+              <div className="mt-6 grid gap-4 md:grid-cols-2">
+                <Labeled label="Estilo/dieta">
+                  <select className="input" value={dieta} onChange={(e) => setDieta(e.target.value)}>
+                    <option>Normal</option>
+                    <option>Saludable</option>
+                    <option>Alta proteína</option>
+                    <option>Vegetariano</option>
+                    <option>Vegano</option>
+                    <option>Sin gluten</option>
+                    <option>Sin lactosa</option>
+                  </select>
+                </Labeled>
+
+                <Labeled label="Objetivo">
+                  <select className="input" value={objetivo} onChange={(e) => setObjetivo(e.target.value)}>
+                    <option>Ahorro</option>
+                    <option>Variedad</option>
+                    <option>Express (muy rápido)</option>
+                  </select>
+                </Labeled>
+
+                <Labeled label="Alergias (opcional)">
+                  <div className="flex gap-2 flex-wrap">
+                    {['Maní', 'Mariscos', 'Gluten', 'Lácteos', 'Huevo'].map((al) => {
+                      const on = alergias.includes(al)
+                      return (
+                        <Chip
+                          key={al}
+                          active={on}
+                          onClick={() =>
+                            setAlergias((cur) => (on ? cur.filter((x) => x !== al) : [...cur, al]))
+                          }
+                        >
+                          {al}
+                        </Chip>
+                      )
+                    })}
+                  </div>
+                </Labeled>
+              </div>
+
+              <div className="mt-6 flex justify-between">
+                <Button variant="ghost" onClick={() => setStep(2)}>Volver</Button>
+                <Button onClick={() => setStep(4)}>Continuar</Button>
+              </div>
+            </Card>
+          )}
+
+          {/* STEP 4: Confirm / Generate */}
+          {step === 4 && !plan && (
+            <Card>
+              <h2 className="text-2xl font-bold">Confirma y genera tu menú</h2>
+              <p className="text-graphite mt-1">Si ves todo bien, ¡dale al botón! 🔥</p>
+
+              <ul className="mt-6 grid sm:grid-cols-2 gap-3 text-sm">
+                <li className="p-4 rounded-2xl bg-card border border-line">
+                  <div className="font-semibold">Ciudad</div>
+                  <div className="text-graphite">{ciudad}</div>
+                </li>
+                <li className="p-4 rounded-2xl bg-card border border-line">
+                  <div className="font-semibold">Personas</div>
+                  <div className="text-graphite">{personas}</div>
+                </li>
+                <li className="p-4 rounded-2xl bg-card border border-line">
+                  <div className="font-semibold">Tipo de comida</div>
+                  <div className="text-graphite">{tipoComida}</div>
+                </li>
+                <li className="p-4 rounded-2xl bg-card border border-line">
+                  <div className="font-semibold">Tiempo</div>
+                  <div className="text-graphite">{modo}</div>
+                </li>
+                <li className="p-4 rounded-2xl bg-card border border-line">
+                  <div className="font-semibold">Equipo</div>
+                  <div className="text-graphite">{equipo.length ? equipo.join(', ') : 'Básico'}</div>
+                </li>
+                <li className="p-4 rounded-2xl bg-card border border-line">
+                  <div className="font-semibold">Preferencias</div>
+                  <div className="text-graphite">{prefs.join(' · ')}</div>
+                </li>
+              </ul>
+
+              {errorMsg && <div className="mt-4 text-rose-600 bg-rose-50 border border-rose-200 p-3 rounded-xl">{errorMsg}</div>}
+
+              <div className="mt-6 flex justify-between">
+                <Button variant="ghost" onClick={() => setStep(3)}>Volver</Button>
+                <Button onClick={handleGenerate}>Confirmar y generar</Button>
+              </div>
+            </Card>
+          )}
+
+          {/* RESULTS */}
+          {plan && (
+            <Card>
+              <h2 className="text-2xl font-extrabold">¡Tu menú de 7 días está listo! 🍽️</h2>
+              <p className="text-graphite mt-1">
+                Ciudad: <strong>{plan.meta.ciudad}</strong> · Personas: <strong>{plan.meta.personas}</strong> · Tiempo: <strong>{plan.meta.modo}</strong>
               </p>
-              <div className="mt-4 grid sm:grid-cols-2 md:grid-cols-3 gap-4">
-                {categoriaCards.map(({ cat, items, totalCat }) => (
-                  <div key={cat} className="rounded-2xl border border-black/10 p-4">
-                    <div className="flex items-center justify-between">
-                      <div className="font-semibold">{cat}</div>
-                      <div className="text-black/70 text-sm">{fmtCOP(totalCat)}</div>
+
+              {/* Menú por día */}
+              <div className="mt-6 grid gap-3">
+                {plan.menu.map((d) => (
+                  <div key={d.dia} className="rounded-2xl border border-line p-4 bg-card">
+                    <div className="font-semibold">Día {d.dia}: {d.plato}</div>
+                    <div className="text-sm text-graphite">
+                      Ingredientes: {d.ingredientes.map(i => `${i.qty} ${i.unit} ${i.name}`).join(', ')}
                     </div>
-                    <ul className="mt-3 text-sm text-graphite space-y-1 max-h-40 overflow-auto pr-1">
-                      {items.map((i, idx) => (
-                        <li key={idx}>
-                          {i.qty} {i.unit} · {i.name} {i.estCOP ? <span className="text-stone">({fmtCOP(i.estCOP)})</span> : null}
-                        </li>
-                      ))}
-                    </ul>
                   </div>
                 ))}
               </div>
 
-              {plan.costos && (
-                <div className="mt-4 rounded-2xl border border-amber p-4 flex items-center justify-between">
-                  <div className="font-semibold">Total estimado ({plan.meta.ciudad})</div>
-                  <div className="text-2xl font-extrabold">{fmtCOP(plan.costos.total)}</div>
+              {/* Resumen por categoría */}
+              <div className="mt-8">
+                <h3 className="text-xl font-bold mb-3">Resumen por categoría</h3>
+                <div className="grid md:grid-cols-2 gap-4">
+                  {Object.entries(plan.lista).map(([cat, items]) => (
+                    <div key={cat} className="rounded-2xl border border-line bg-white p-4">
+                      <div className="flex justify-between items-center mb-2">
+                        <div className="font-semibold">{cat}</div>
+                        <div className="text-sm text-stone">
+                          {moneyCO.format(
+                            items.reduce((acc, it) => acc + (it.estCOP || 0), 0)
+                          )}
+                        </div>
+                      </div>
+                      <ul className="text-sm text-graphite space-y-1">
+                        {items.map((it, idx) => (
+                          <li key={idx} className="flex justify-between">
+                            <span>{it.name} · {it.qty} {it.unit}</span>
+                            <span className="text-stone">{it.estCOP ? moneyCO.format(it.estCOP) : '—'}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="mt-4 p-4 rounded-2xl bg-emerald-50 border border-emerald-200 flex items-center justify-between">
+                  <div className="font-semibold">Total estimado</div>
+                  <div className="text-lg font-extrabold">{moneyCO.format(plan.costos.total)}</div>
+                </div>
+                <p className="text-sm text-stone mt-2">{plan.costos.nota}</p>
+              </div>
+
+              {/* PDF actions */}
+              <div className="mt-8 flex flex-wrap gap-3">
+                <Button onClick={handleMakePdf} disabled={makingPdf}>
+                  {makingPdf ? 'Armando PDF… ⏳' : 'Descargar PDF'}
+                </Button>
+                {pdfUrl && (
+                  <a
+                    className="underline decoration-amber decoration-4 underline-offset-4 text-charcoal"
+                    href={pdfUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    Ver vista previa en pestaña nueva
+                  </a>
+                )}
+              </div>
+
+              {/* Inline PDF preview (si ya generamos) */}
+              {pdfUrl && (
+                <div className="mt-6 rounded-2xl overflow-hidden border border-line">
+                  <iframe src={pdfUrl} className="w-full h-[600px]" />
                 </div>
               )}
-              <p className="text-xs text-stone mt-2">
-                * {plan.costos?.nota ?? 'Precios estimados por ciudad. Pueden variar por tienda/temporada.'}
+            </Card>
+          )}
+        </section>
+
+        {/* RIGHT: Live Summary */}
+        <aside className="lg:col-span-1">
+          <Card>
+            <h3 className="text-lg font-bold">Resumen rápido</h3>
+            <ul className="mt-3 text-sm text-graphite space-y-2">
+              <li><span className="font-semibold">Ciudad:</span> {ciudad}</li>
+              <li><span className="font-semibold">Personas:</span> {personas}</li>
+              <li><span className="font-semibold">Comida:</span> {tipoComida}</li>
+              <li><span className="font-semibold">Tiempo:</span> {modo}</li>
+              <li><span className="font-semibold">Equipo:</span> {equipo.length ? equipo.join(', ') : 'Básico'}</li>
+              <li><span className="font-semibold">Dieta / objetivo:</span> {dieta} · {objetivo}</li>
+              {alergias.length > 0 && <li><span className="font-semibold">Alergias:</span> {alergias.join(', ')}</li>}
+            </ul>
+            {!plan && (
+              <p className="mt-3 text-xs text-stone">
+                Tip: mientras avanzas, este resumen se va actualizando. Nada se guarda hasta que generes tu plan.
               </p>
+            )}
+          </Card>
+
+          {/* Cute loading card while generando */}
+          {loadingPlan && (
+            <div className="mt-6 p-5 rounded-2xl bg-amber-50 border border-amber-200">
+              <div className="text-lg font-bold">Estamos cocinando tu menú…</div>
+              <p className="text-graphite text-sm mt-1">
+                Sacando la olla, pelando la cebolla y hablando con la IA 👩‍🍳🤖. Esto puede tardar unos segundos.
+              </p>
+              <div className="mt-4 animate-pulse text-4xl">⏳</div>
             </div>
           )}
+        </aside>
+      </div>
 
-          {/* Menú detallado */}
-          <div className="bg-card rounded-3xl shadow-soft border border-line p-6">
-            <h3 className="text-xl font-bold">Menú (Día 1–7)</h3>
-            <div className="mt-4 grid md:grid-cols-2 gap-4">
-              {plan.menu.map((d) => (
-                <div key={d.dia} className="rounded-2xl border border-line p-4">
-                  <div className="font-semibold">Día {d.dia}: {d.plato}</div>
-                  <div className="text-sm text-graphite">
-                    Ingredientes: {d.ingredientes.map((i) => `${i.qty} ${i.unit} ${i.name}`).join(', ')}
-                  </div>
-                  <div className="text-sm text-graphite">Pasos: {d.pasos.join(' | ')}</div>
-                  <div className="text-sm text-black/80 mt-1">💡 {d.tip}</div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Acciones finales */}
-          <div className="bg-card rounded-3xl shadow-soft border border-line p-6">
-            <div className="font-semibold">Batch cooking</div>
-            <div className="text-graphite text-sm">Base A: {plan.batch.baseA}</div>
-            <div className="text-graphite text-sm">Base B: {plan.batch.baseB}</div>
-
-            <div className="mt-6 flex flex-col sm:flex-row gap-3">
-              <input
-                type="email"
-                placeholder="Tu correo (para enviarte el PDF)"
-                className="rounded-2xl border border-line px-4 py-3 w-full sm:w-80"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-              />
-              <Button onClick={enviarEmail} disabled={sending || !email}>
-                {sending ? 'Enviando…' : 'Enviar por email'}
-              </Button>
-            </div>
-            <p className="text-xs text-stone mt-2">Te enviaremos el PDF generado a tu correo.</p>
-          </div>
-        </div>
-      )}
-
-      {/* OVERLAY de carga al generar plan */}
-      {loadingPlan && (
-        <div className="fixed inset-0 bg-black/30 backdrop-blur-sm z-50 flex items-center justify-center p-6">
-          <div className="bg-white rounded-3xl shadow-soft border border-line p-6 w-full max-w-sm text-center">
-            <div className="animate-spin mx-auto mb-3 h-8 w-8 rounded-full border-2 border-amber border-t-transparent" />
-            <div className="text-lg font-bold">¡Estamos preparando tu menú!</div>
-            <p className="text-sm text-stone mt-1">
-              Picando cebolla sin llorar… 🧅 Mezclando IA con sazón casera… 👩‍🍳
+      {/* Floating loading overlay (opcional) */}
+      {(loadingPlan || makingPdf) && (
+        <div className="fixed inset-0 bg-black/20 backdrop-blur-[1px] flex items-center justify-center z-50">
+          <div className="rounded-2xl bg-white p-6 shadow-xl border border-line w-[min(95vw,520px)]">
+            <div className="text-xl font-bold">{loadingPlan ? 'Generando tu plan…' : 'Creando PDF…'}</div>
+            <p className="text-stone mt-1">
+              {loadingPlan
+                ? 'Afilando cuchillos y pidiéndole ideas a la IA. Quédate por aquí…'
+                : 'Acomodando letras, sumando ingredientes y dejando el PDF bonito.'}
             </p>
-            <p className="text-xs text-stone mt-2">Suele tardar ~10–20 seg según tu ciudad y preferencias.</p>
+            <div className="mt-4 h-2 rounded-full bg-line overflow-hidden">
+              <div className="h-2 bg-amber animate-[progress_1.6s_ease_infinite]" style={{ width: '60%' }} />
+            </div>
           </div>
+          <style jsx>{`
+            @keyframes progress {
+              0% { transform: translateX(-100%); }
+              100% { transform: translateX(200%); }
+            }
+          `}</style>
         </div>
       )}
-
-      {/* Animación global */}
-      <style jsx global>{`
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(6px);} to {opacity:1; transform:none;} }
-      `}</style>
     </main>
   )
 }
+
+/* ----------------- UI helpers ----------------- */
+
+function Card({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="bg-white rounded-3xl shadow-soft border border-line p-6">
+      {children}
+    </div>
+  )
+}
+
+function Labeled({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <label className="block">
+      <div className="text-sm font-semibold mb-2">{label}</div>
+      {children}
+    </label>
+  )
+}
+
+function Chip({
+  active,
+  onClick,
+  children
+}: {
+  active?: boolean
+  onClick?: () => void
+  children: React.ReactNode
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={[
+        'px-3 py-1.5 rounded-full border text-sm',
+        active ? 'bg-amber/10 border-amber text-charcoal' : 'bg-white border-line text-graphite hover:bg-stone-50'
+      ].join(' ')}
+    >
+      {children}
+    </button>
+  )
+}
+
+function InputBase({ className = '', ...rest }: React.InputHTMLAttributes<HTMLInputElement>) {
+  return <input className={`input ${className}`} {...rest} />
+}
+
+// Tailwind shortcuts used above
+declare global {
+  // This lets us use className "input" without TypeScript whining
+  interface HTMLElementTagNameMap {
+    input: HTMLInputElement
+  }
+}
+
 
