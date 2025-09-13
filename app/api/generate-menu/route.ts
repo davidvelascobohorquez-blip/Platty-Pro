@@ -5,9 +5,6 @@ import pricebookCO from '@/data/pricebook.co.json' assert { type: 'json' }
 
 export const runtime = 'nodejs'
 
-/* =========================
-   Tipos
-========================= */
 type Unit = 'g' | 'ml' | 'ud'
 type ItemQty = { name: string; qty: number; unit: Unit; estCOP?: number }
 
@@ -28,15 +25,9 @@ type Plan = {
   tiendas: { sugerida: StoreOpt; opciones: StoreOpt[]; mapsUrl: string }
 }
 
-/* =========================
-   Constantes
-========================= */
 const TRIALS_FREE = 3
 const toCOP = (n: number) => Math.round(n)
 
-/* =========================
-   Utils
-========================= */
 function deaccent(s: string) {
   return s.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
 }
@@ -53,7 +44,7 @@ function cityMultiplier(ciudad: string) {
 
 function unitPriceCOP(name: string, ciudad: string): { perGram?: number; perMl?: number; perUnit?: number } {
   const ing = (pricebookCO as any).ingredients || {}
-  const info = ing[name] || ing[norm(name)]
+  const info = ing[name] || ing[norm(name)] // tratar de calzar por nombre normalizado
   if (!info) return {}
   const mult = cityMultiplier(ciudad)
   const base = info.price * mult
@@ -88,15 +79,10 @@ function friendlyQty(q: number, u: Unit) {
 }
 
 function categoriasMap() {
+  // Mapeo flexible por normalización para agrupar más ingredientes
   return {
-    'Frutas y verduras': [
-      'tomate', 'cebolla', 'zanahoria', 'pimenton', 'pimentón', 'brocoli', 'brócoli', 'papa', 'limon', 'limón',
-      'cilantro', 'lechuga', 'pepino', 'banano', 'aguacate', 'ajo'
-    ],
-    'Proteína': [
-      'pollo pechuga', 'pollo', 'carne res', 'res', 'cerdo', 'pescado', 'atún', 'atun',
-      'huevo', 'queso', 'lentejas', 'frijol', 'garbanzo'
-    ],
+    'Frutas y verduras': ['tomate', 'cebolla', 'zanahoria', 'pimenton', 'pimentón', 'brocoli', 'brócoli', 'papa', 'limon', 'limón', 'cilantro', 'lechuga', 'pepino', 'banano', 'aguacate', 'ajo'],
+    'Proteína': ['pollo pechuga', 'pollo', 'carne res', 'res', 'cerdo', 'pescado', 'atún', 'atun', 'huevo', 'queso', 'lentejas', 'frijol', 'garbanzo'],
     'Granos y harinas': ['arroz', 'pasta', 'tortilla', 'arepa', 'harina', 'pan'],
     'Lácteos y huevos': ['leche', 'yogur', 'mantequilla', 'huevo', 'queso'],
     'Abarrotes y condimentos': ['aceite', 'sal', 'azucar', 'azúcar', 'pimienta', 'comino', 'oregano', 'orégano', 'vinagre'],
@@ -110,6 +96,7 @@ function catForIngredient(name: string): string {
   for (const [cat, arr] of Object.entries(cats)) {
     if (arr.some(x => norm(x) === n)) return cat
   }
+  // heurística por palabra clave
   if (/(pollo|res|cerdo|pavo|huevo|queso|pescad|atun|lenteja|frijol|garbanzo)/i.test(name)) return 'Proteína'
   if (/(arroz|pasta|tortilla|arepa|harina|pan)/i.test(name)) return 'Granos y harinas'
   if (/(leche|yogur|mantequilla)/i.test(name)) return 'Lácteos y huevos'
@@ -119,6 +106,7 @@ function catForIngredient(name: string): string {
 }
 
 function storesForCity(ciudad: string): { sugerida: StoreOpt; opciones: StoreOpt[]; mapsUrl: string } {
+  // Heurística simple: prioriza hard-discount y da alternativas por Colombia.
   const hard = ['D1', 'Ara']
   const sup = ['Éxito', 'Jumbo', 'Carulla']
   const sugerida: StoreOpt = { nombre: hard[0], tipo: 'hard-discount' }
@@ -129,9 +117,9 @@ function storesForCity(ciudad: string): { sugerida: StoreOpt; opciones: StoreOpt
   return { sugerida, opciones, mapsUrl }
 }
 
-/* =========================
-   Fallbacks por tipo de comida
-========================= */
+/** ---------------------------
+ * Fallbacks variados por tipo
+ * --------------------------- */
 type Meal = 'Desayunos' | 'Almuerzos' | 'Cenas'
 function fallbackRecipes(meal: Meal) {
   if (meal === 'Desayunos') {
@@ -145,7 +133,7 @@ function fallbackRecipes(meal: Meal) {
       { dia: 7, plato: 'Calentado ligero', receta: [{ n: 'arroz', u: 'g', pp: 80 }, { n: 'huevo', u: 'ud', pp: 1 }, { n: 'cebolla', u: 'g', pp: 30 }] },
     ]
   }
-  // Almuerzos/Cenas
+  // Por defecto (almuerzos/cenas)
   return [
     { dia: 1, plato: 'Arroz con pollo', receta: [{ n: 'arroz', u: 'g', pp: 90 }, { n: 'pollo pechuga', u: 'g', pp: 140 }, { n: 'tomate', u: 'g', pp: 80 }, { n: 'cebolla', u: 'g', pp: 60 }, { n: 'ajo', u: 'g', pp: 6 }, { n: 'aceite', u: 'ml', pp: 8 }] },
     { dia: 2, plato: 'Pasta con tomate', receta: [{ n: 'pasta', u: 'g', pp: 100 }, { n: 'tomate', u: 'g', pp: 120 }, { n: 'cebolla', u: 'g', pp: 50 }, { n: 'ajo', u: 'g', pp: 6 }, { n: 'aceite', u: 'ml', pp: 8 }] },
@@ -174,6 +162,7 @@ function fallbackPlan(ciudad: string, personas: number, modo: string, meal: Meal
     }
   })
 
+  // Consolidado y costos
   const all = consolidate(menu.flatMap(m => m.ingredientes)).map(it => ({ ...it, qty: friendlyQty(it.qty, it.unit) }))
   const lista: Record<string, ItemQty[]> = {}
   for (const it of all) {
@@ -182,7 +171,7 @@ function fallbackPlan(ciudad: string, personas: number, modo: string, meal: Meal
     const est = estimateItemCOP(it, ciudad)
     lista[cat].push({ ...it, estCOP: est !== undefined ? toCOP(est) : undefined })
   }
-
+  // Totales por categoría
   const porCategoria: Record<string, number> = {}
   for (const [cat, items] of Object.entries(lista)) {
     porCategoria[cat] = toCOP(items.reduce((acc, i) => acc + (i.estCOP || 0), 0))
@@ -191,7 +180,12 @@ function fallbackPlan(ciudad: string, personas: number, modo: string, meal: Meal
   const total = toCOP(subtotal * 1.10)
 
   const detalle = all
-    .map(i => ({ name: i.name, qty: i.qty, unit: i.unit, estCOP: estimateItemCOP(i, ciudad) !== undefined ? toCOP(estimateItemCOP(i, ciudad)!) : undefined }))
+    .map(i => ({
+      name: i.name,
+      qty: i.qty,
+      unit: i.unit,
+      estCOP: estimateItemCOP(i, ciudad) !== undefined ? toCOP(estimateItemCOP(i, ciudad)!) : undefined,
+    }))
     .sort((a, b) => (b.estCOP || 0) - (a.estCOP || 0))
 
   const tiendas = storesForCity(ciudad)
@@ -212,9 +206,6 @@ function fallbackPlan(ciudad: string, personas: number, modo: string, meal: Meal
   }
 }
 
-/* =========================
-   Handler
-========================= */
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({} as any))
 
@@ -224,6 +215,7 @@ export async function POST(req: NextRequest) {
     modo = '30 min',
     equipo = 'Todo ok',
     prefs = ['Económico'],
+    // nuevos campos (opcionales)
     comidas = ['Almuerzos'],
     dieta = 'Ninguna',
     alergias = [],
@@ -231,6 +223,7 @@ export async function POST(req: NextRequest) {
     presupuesto,
   } = body || {}
 
+  // Escoge UN tipo de comida para 7 días (si vienen varias, tomamos la primera)
   const meal: Meal = Array.isArray(comidas) && comidas.length ? (comidas[0] as Meal) : 'Almuerzos'
 
   // trials/licencia
@@ -247,11 +240,12 @@ export async function POST(req: NextRequest) {
     )
   }
 
+  // Intento con OpenAI (si hay API key), si no, fallback
   try {
     if (process.env.OPENAI_API_KEY) {
       const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
 
-      // Schema estricto
+      // schema estricto: 7 días con ingredientes escalados
       const schema = {
         type: 'object',
         properties: {
@@ -284,24 +278,17 @@ export async function POST(req: NextRequest) {
         required: ['menu'],
       } as const
 
-      // Prompt reforzado (variedad, dieta/alergias, equipo, presupuesto)
+      // Prompt con contexto completo (tiempo/equipo/dieta/alergias/objetivo/presupuesto)
       const prompt = `
-Genera un plan de ${meal.toLowerCase()} para 7 días, ${personas} personas, en ${ciudad}.
-Tiempo por preparación: ${modo}. Equipo disponible: ${equipo}.
-Dieta: ${String(dieta)}. Alergias/evitar: ${Array.isArray(alergias) && alergias.length ? alergias.join(', ') : 'ninguna'}.
+Eres un chef planificador. Genera un menú de ${meal.toLowerCase()} para 7 días, para ${personas} personas en ${ciudad}.
+Tiempo por preparación: ${modo}. Equipo disponible: ${equipo}. Dieta: ${dieta}. Alergias/evitar: ${Array.isArray(alergias) && alergias.length ? alergias.join(', ') : 'ninguna'}.
 Objetivo: ${objetivo}. ${presupuesto ? `Presupuesto semanal objetivo: ${presupuesto} COP.` : ''}
-Preferencias: ${Array.isArray(prefs) ? prefs.join(', ') : String(prefs)}.
+Preferencias adicionales: ${Array.isArray(prefs) ? prefs.join(', ') : String(prefs)}.
 
-REQUISITOS:
-1) Devuelve SOLO JSON válido con EXACTAMENTE este schema (sin texto extra): ${JSON.stringify(schema)}
-2) 7 días (dia: 1..7).
-3) Cada día: plato, ingredientes con cantidades YA escaladas para ${personas} personas, con unidad g/ml/ud.
-4) Variedad mínima de proteína: al menos 4 fuentes diferentes en la semana (p.ej. pollo, res/cerdo, pescado/atún, huevo/queso/legumbres). No repitas la misma proteína principal más de 2 veces.
-5) Respeta dieta y alergias (si vegetariano/vegano: solo proteínas vegetales).
-6) Pasos concisos (3–6) y un tip útil por día.
-7) Si no hay cierto equipo, no lo uses (por ejemplo, sin horno → no usar horno).
-8) Si la preferencia incluye "Económico", evita ingredientes caros o difíciles.
-`.trim()
+Varía proteínas a lo largo de la semana (pollo, res, cerdo, huevo, pescado/atún y al menos 1 legumbre) respetando dieta/alergias.
+Devuelve SOLO JSON con exactamente este schema (con cantidades ya escaladas por ${personas} personas y unidades en g/ml/ud):
+${JSON.stringify(schema)}
+      `.trim()
 
       const chat = await openai.chat.completions.create({
         model: 'gpt-4o-mini',
@@ -315,11 +302,16 @@ REQUISITOS:
 
       const content = chat.choices?.[0]?.message?.content?.trim() || '{}'
       let ai: any = {}
-      try { ai = JSON.parse(content) } catch { ai = {} }
+      try {
+        ai = JSON.parse(content)
+      } catch {
+        ai = {}
+      }
 
-      // Construir plan base y enriquecer si la IA respondió bien
+      // Construimos plan base y lo enriquecemos si la IA respondió bien
       const base = fallbackPlan(ciudad, personas, modo, meal)
       if (ai?.menu?.length === 7) {
+        // Reemplaza solo el menú; el resto lo recalculamos
         base.menu = ai.menu.map((d: any, i: number) => ({
           dia: typeof d.dia === 'number' ? d.dia : i + 1,
           plato: String(d.plato || `Día ${i + 1}`),
@@ -335,7 +327,8 @@ REQUISITOS:
         }))
 
         const all = consolidate(base.menu.flatMap((m: any) => m.ingredientes)).map((it: any) => ({
-          ...it, qty: friendlyQty(it.qty, it.unit),
+          ...it,
+          qty: friendlyQty(it.qty, it.unit),
         }))
 
         const lista: Record<string, ItemQty[]> = {}
@@ -360,7 +353,7 @@ REQUISITOS:
             unit: i.unit,
             estCOP: estimateItemCOP(i, ciudad) !== undefined ? toCOP(estimateItemCOP(i, ciudad)!) : undefined,
           }))
-          .sort((a, b) => (b.estCOP || 0) - (a.estCOP || 0))
+          .sort((a: any, b: any) => (b.estCOP || 0) - (a.estCOP || 0))
 
         base.lista = lista
         base.costos = {
@@ -375,15 +368,13 @@ REQUISITOS:
       const res = NextResponse.json(base, {
         headers: { 'x-platy-has-license': String(hasLicense), 'x-platy-trials': String(trials) },
       })
-      if (hasLicense) {
+      if (hasLicense)
         res.cookies.set('platy_license', licenseHeader!, { httpOnly: true, sameSite: 'lax', maxAge: 60 * 60 * 24 * 365 })
-      } else {
-        res.cookies.set('platy_trials', String(trials + 1), { httpOnly: true, sameSite: 'lax', maxAge: 60 * 60 * 24 * 365 })
-      }
+      else res.cookies.set('platy_trials', String(trials + 1), { httpOnly: true, sameSite: 'lax', maxAge: 60 * 60 * 24 * 365 })
       return res
     }
   } catch (e) {
-    // Log opcional si quieres depurar: console.error(e)
+    // cae a fallback abajo
   }
 
   // Fallback sin OpenAI
@@ -391,11 +382,8 @@ REQUISITOS:
   const res = NextResponse.json(plan, {
     headers: { 'x-platy-has-license': String(hasLicense), 'x-platy-trials': String(trials) },
   })
-  if (hasLicense) {
+  if (hasLicense)
     res.cookies.set('platy_license', licenseHeader!, { httpOnly: true, sameSite: 'lax', maxAge: 60 * 60 * 24 * 365 })
-  } else {
-    res.cookies.set('platy_trials', String(trials + 1), { httpOnly: true, sameSite: 'lax', maxAge: 60 * 60 * 24 * 365 })
-  }
+  else res.cookies.set('platy_trials', String(trials + 1), { httpOnly: true, sameSite: 'lax', maxAge: 60 * 60 * 24 * 365 })
   return res
 }
-
