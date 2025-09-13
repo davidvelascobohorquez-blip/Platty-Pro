@@ -1,3 +1,4 @@
+// app/page.tsx
 import Link from 'next/link'
 import Brand from '@/components/Brand'
 import Button from '@/components/Button'
@@ -5,10 +6,10 @@ import { site } from '@/site.config'
 
 export default function Page() {
   return (
-    <main className="container py-14">
+    <main className="container py-10 md:py-14">
       {/* HEADER */}
       <header className="flex items-center justify-between">
-        <Brand />
+        <Brand variant="wordmark" />
         <nav className="text-sm text-stone">
           <a href="#como" className="mr-6 hover:text-charcoal">Cómo funciona</a>
           <a href="#para-quien" className="mr-6 hover:text-charcoal">Para quién</a>
@@ -17,15 +18,15 @@ export default function Page() {
       </header>
 
       {/* HERO */}
-      <section className="mt-16 grid md:grid-cols-2 gap-10 items-center">
+      <section className="mt-12 md:mt-16 grid md:grid-cols-2 gap-10 items-center">
         <div>
-          <h1 className="text-5xl md:text-6xl font-extrabold tracking-tight leading-[1.05]">
+          <h1 className="text-4xl sm:text-5xl md:text-6xl font-extrabold tracking-tight leading-tight md:leading-[1.05]">
             Tu menú semanal más barato, en 1 clic
           </h1>
           <p className="mt-5 text-lg text-graphite">
             Usamos <strong>IA</strong> para planificar 7 días con ingredientes locales, cantidades en <strong>g/ml/ud</strong> y <strong>costo estimado</strong> según tu ciudad.
           </p>
-          <div className="mt-8 flex gap-4">
+          <div className="mt-8 flex flex-wrap gap-4">
             <Link href="/demo"><Button>Probar gratis ({site.trials.free} intentos)</Button></Link>
             <a href="#precios" className="underline decoration-amber decoration-4 underline-offset-4">
               {site.copy?.lifetimePitch ?? 'Acceso de por vida. 3 intentos gratis para probar.'}
@@ -126,7 +127,9 @@ export default function Page() {
             <div className="text-2xl font-bold">De por vida</div>
             <div className="text-graphite mt-2">Acceso ilimitado. Soporte básico.</div>
             <div className="mt-4 text-3xl font-extrabold">${site.pricing.lifetimeUSD} <span className="text-base font-semibold text-stone">USD</span></div>
-            <p className="text-sm text-stone mt-2">{site.copy?.lifetimePitch ?? 'Acceso de por vida. 3 intentos gratis para probar.'}</p>
+            <p className="text-sm text-stone mt-2">
+              {site.copy?.lifetimePitch ?? 'Acceso de por vida. 3 intentos gratis para probar.'}
+            </p>
           </div>
         </div>
       </section>
