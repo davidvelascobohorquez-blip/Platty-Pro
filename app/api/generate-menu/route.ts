@@ -7,7 +7,6 @@ export const runtime = 'nodejs'
 
 type Unit = 'g'|'ml'|'ud'
 type ItemQty = { name: string; qty: number; unit: Unit; estCOP?: number }
-type StoreOpt = { nombre: string; tipo: 'hard-discount'|'supermercado' }
 type Plan = {
   menu: { dia: number; plato: string; ingredientes: ItemQty[]; pasos: string[]; tip: string }[]
   lista: Record<string, ItemQty[]>
@@ -15,13 +14,11 @@ type Plan = {
   sobrantes: string[]
   meta: { ciudad: string; personas: number; modo: string; moneda: 'COP' }
   costos: { porCategoria: Record<string, number>; total: number; nota: string }
-  tiendas: { sugerida: StoreOpt; opciones: StoreOpt[]; mapsUrl: string }
 }
 
 const TRIALS_FREE = 3
 const toCOP = (n:number) => Math.round(n)
 
-// --------- PRECIOS CO ----------
 function cityMultiplier(ciudad: string) {
   const c = ciudad.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
   const key = Object.keys((pricebookCO as any).cityMultipliers).find(k =>
@@ -46,8 +43,6 @@ function estimateItemCOP(it: ItemQty, ciudad: string) {
   if (it.unit === 'ud' && p.perUnit) return it.qty * p.perUnit
   return undefined
 }
-
-// --------- LISTA/UTILS ----------
 function consolidate(items: ItemQty[]) {
   const map = new Map<string, ItemQty>()
   for (const it of items) {
@@ -63,41 +58,6 @@ function friendlyQty(q: number, u: Unit) {
   return Math.round(q)
 }
 
-// --------- TIENDAS SUGERIDAS ----------
-const HARD_CO = ['Tiendas D1','Ara','Surtimax'] as const
-const SUP_CO  = ['Éxito','Jumbo','Olímpica'] as const
-
-const HARD_MX = ['Bodega Aurrerá'] as const
-const SUP_MX  = ['Walmart','Soriana','Chedraui'] as const
-
-const HARD_AR = ['DIA'] as const
-const SUP_AR  = ['Carrefour','Jumbo','Disco'] as const
-
-function inferCountry(ciudad: string): 'CO'|'MX'|'AR'|'OTRO' {
-  const c = ciudad.toLowerCase()
-  if (c.includes('co') || ['bogota','bogotá','medellin','cali','barranquilla','bucaramanga'].some(x=>c.includes(x))) return 'CO'
-  if (c.includes('mx') || ['cdmx','guadalajara','monterrey'].some(x=>c.includes(x))) return 'MX'
-  if (c.includes('ar') || ['buenos aires','cordoba','rosario'].some(x=>c.includes(x))) return 'AR'
-  return 'OTRO'
-}
-function storeSuggestions(ciudad: string) {
-  const country = inferCountry(ciudad)
-  let hard: string[] = [], sup: string[] = []
-  if (country==='CO') { hard = [...HARD_CO]; sup = [...SUP_CO] }
-  else if (country==='MX') { hard = [...HARD_MX]; sup = [...SUP_MX] }
-  else if (country==='AR') { hard = [...HARD_AR]; sup = [...SUP_AR] }
-  else { hard = ['Mercado local / hard discount']; sup = ['Supermercado de barrio'] }
-
-  const sugerida: StoreOpt = { nombre: hard[0], tipo: 'hard-discount' }
-  const opciones: StoreOpt[] = [
-    ...hard.map(n=>({nombre:n, tipo:'hard-discount' as const})),
-    ...sup.map(n=>({nombre:n, tipo:'supermercado' as const}))
-  ]
-  const mapsUrl = `https://www.google.com/maps/search/${encodeURIComponent(sugerida.nombre + ' cerca de ' + ciudad)}`
-  return { sugerida, opciones, mapsUrl }
-}
-
-// --------- PLAN FALLBACK ----------
 function fallbackPlan(ciudad: string, personas: number, modo: string): Plan {
   const base = [
     { dia: 1, plato: 'Arroz con pollo', receta: [{n:'arroz',u:'g',pp:90},{n:'pollo pechuga',u:'g',pp:140},{n:'tomate',u:'g',pp:80},{n:'cebolla',u:'g',pp:60},{n:'ajo',u:'g',pp:6},{n:'aceite',u:'ml',pp:8}] },
@@ -143,12 +103,10 @@ function fallbackPlan(ciudad: string, personas: number, modo: string): Plan {
     lista,
     batch:{baseA:'Sofrito para 3 días', baseB:'Caldo base para sopas'},
     sobrantes:['Arroz cocido','Sofrito'],
-    costos:{porCategoria, total, nota:`Precios estimados para ${ciudad}. Estimación con pricebook local (+10% buffer). Puede variar por tienda/temporada.`},
-    tiendas: storeSuggestions(ciudad)
+    costos:{porCategoria, total, nota:'Estimado con pricebook local (+10% buffer). Puede variar por tienda/temporada.'}
   }
 }
 
-// --------- HANDLER ----------
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(()=> ({} as any))
   const { ciudad='Bogotá', personas=2, modo='30 min', equipo='Todo ok', prefs=['Económico'] } = body || {}
@@ -169,6 +127,7 @@ export async function POST(req: NextRequest) {
   try {
     if (process.env.OPENAI_API_KEY) {
       const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
+
       const schema = {
         type:'object', properties:{
           menu:{type:'array',items:{type:'object',properties:{
@@ -181,20 +140,26 @@ export async function POST(req: NextRequest) {
         }, required:['menu']
       } as const
 
-      const prompt = `Eres chef planificador para ${personas} personas en ${ciudad}, tiempo ${modo}, equipo ${equipo}, preferencias: ${prefs.join(', ')}.
+      const system = `Eres un chef planificador que devuelve JSON estricto del menú semanal. Debes respetar exactamente el schema proporcionado.`
+      const user = `Eres chef planificador para ${personas} personas en ${ciudad}, tiempo ${modo}, equipo ${equipo}, preferencias: ${prefs.join(', ')}.
 Devuelve JSON con 7 días (menu[].dia 1..7), plato y lista de ingredientes con cantidades YA ESCALADAS (qty) y unit en g/ml/ud.
-Respeta exactamente este schema: ${JSON.stringify(schema)}`
+Schema ESTRICTO: ${JSON.stringify(schema)}`
 
-      const resp = await openai.responses.create({
+      // 👇 Chat Completions (compatible con todos los SDK 4.x)
+      const comp = await openai.chat.completions.create({
         model: 'gpt-4o-mini',
-        input: prompt,
         temperature: 0.4,
-        response_format: { type: 'json_object' }
+        response_format: { type: 'json_object' },
+        messages: [
+          { role: 'system', content: system },
+          { role: 'user', content: user }
+        ]
       })
 
-      const ai = JSON.parse((resp.output_text || '{}').trim() || '{}')
-      const base = fallbackPlan(ciudad, personas, modo)
+      const text = comp.choices?.[0]?.message?.content ?? '{}'
+      const ai = JSON.parse((text || '{}').trim() || '{}')
 
+      const base = fallbackPlan(ciudad, personas, modo)
       if (ai?.menu?.length === 7) {
         base.menu = ai.menu
         const all = consolidate(base.menu.flatMap((m:any)=>m.ingredientes)).map((it:any)=>({...it, qty: friendlyQty(it.qty, it.unit)}))
@@ -217,8 +182,7 @@ Respeta exactamente este schema: ${JSON.stringify(schema)}`
         }
         const subtotal = Object.values(porCategoria).reduce((a,b)=>a+b,0)
         base.lista = lista
-        base.costos = { porCategoria, total: toCOP(subtotal*1.10), nota:`Precios estimados para ${ciudad}. Estimación con pricebook local (+10% buffer). Puede variar por tienda/temporada.` }
-        base.tiendas = storeSuggestions(ciudad)
+        base.costos = { porCategoria, total: toCOP(subtotal*1.10), nota: 'Estimado con pricebook local (+10% buffer). Puede variar por tienda/temporada.' }
       }
 
       const res = NextResponse.json(base, { headers: { 'x-platy-has-license': String(hasLicense), 'x-platy-trials': String(trials) } })
@@ -226,7 +190,9 @@ Respeta exactamente este schema: ${JSON.stringify(schema)}`
       else res.cookies.set('platy_trials', String(trials+1), { httpOnly:true, sameSite:'lax', maxAge: 60*60*24*365 })
       return res
     }
-  } catch {}
+  } catch (e) {
+    // opcional: log
+  }
 
   const plan = fallbackPlan(ciudad, personas, modo)
   const res = NextResponse.json(plan, { headers: { 'x-platy-has-license': String(hasLicense), 'x-platy-trials': String(trials) } })
