@@ -248,8 +248,50 @@ export default function DemoPage() {
       {/* Resultado */}
       {ready && plan && (
         <div className="grid gap-6" style={{ animation: 'fadeIn .25s ease' }}>
+          {/* BARRA FLOTANTE DE ACCIONES */}
+          <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50">
+            <div className="bg-white/90 backdrop-blur rounded-2xl shadow-lg border border-line p-2 flex items-center gap-2">
+              <PDFDownloadLink
+                document={<PlanPDF plan={plan} />}
+                fileName={`PLATY_menu_${plan.meta.ciudad}.pdf`}
+              >
+                {({ loading }) => (
+                  <Button disabled={loading} aria-label="Descargar PDF">
+                    {loading ? 'Generando PDF…' : 'Descargar PDF'}
+                  </Button>
+                )}
+              </PDFDownloadLink>
+
+              <a href={whatsUrl} target="_blank" rel="noreferrer" aria-label="Compartir por WhatsApp">
+                <Button>Compartir WhatsApp</Button>
+              </a>
+
+              <button
+                onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+                className="rounded-2xl border border-line px-3 py-2 text-sm hover:bg-card/70 transition"
+                aria-label="Volver arriba"
+              >
+                ↑ Arriba
+              </button>
+            </div>
+          </div>
+
           <div className="bg-card rounded-3xl shadow-soft border border-line p-6">
-            <h2 className="text-2xl font-extrabold">Menú (Día 1–7)</h2>
+            <div className="flex items-center justify-between gap-3">
+              <h2 className="text-2xl font-extrabold">Menú (Día 1–7)</h2>
+              {/* Botón de descarga extra (respaldo) */}
+              <PDFDownloadLink
+                document={<PlanPDF plan={plan} />}
+                fileName={`PLATY_menu_${plan.meta.ciudad}.pdf`}
+              >
+                {({ loading }) => (
+                  <Button size="sm" disabled={loading} aria-label="Descargar PDF (respaldo)">
+                    {loading ? 'PDF…' : 'Descargar PDF'}
+                  </Button>
+                )}
+              </PDFDownloadLink>
+            </div>
+
             <div className="mt-4 grid md:grid-cols-2 gap-4">
               {plan.menu.map(d => (
                 <div key={d.dia} className="rounded-2xl border border-line p-4">
@@ -289,7 +331,7 @@ export default function DemoPage() {
               <p className="text-graphite mt-1">
                 Sugerimos <strong>{plan.tiendas.sugerida.nombre}</strong> ({plan.tiendas.sugerida.tipo}). Alternativas: {plan.tiendas.opciones.map(o=>o.nombre).join(', ')}.
               </p>
-              <a href={plan.tiendas.mapsUrl} target="_blank" className="inline-block mt-3 underline decoration-amber decoration-4 underline-offset-4">
+              <a href={plan.tiendas.mapsUrl} target="_blank" className="inline-block mt-3 underline decoration-amber decoration-4 underline-offset-4" aria-label="Abrir sugerencia en Google Maps">
                 Ver en Google Maps
               </a>
             </div>
