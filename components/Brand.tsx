@@ -1,26 +1,66 @@
-'use client'
+// components/Brand.tsx
 import Image from 'next/image'
-import Link from 'next/link'
 
-type Props = { className?: string }
+type Props = {
+  /** 
+   * 'wordmark' = logo horizontal con texto (recomendado para el header)
+   * 'icon'     = solo isotipo redondo (para favicons, badges, etc.)
+   * 'lockup'   = icono + wordmark en línea
+   */
+  variant?: 'wordmark' | 'icon' | 'lockup'
+  className?: string
+  alt?: string
+}
 
-export default function Brand({ className = '' }: Props) {
-  return (
-    <Link
-      href="/"
-      aria-label="Ir al inicio"
-      className={`inline-flex items-center ${className}`}
-    >
-      {/* Solo un lockup (wordmark). Sin íconos extra. */}
+export default function Brand({
+  variant = 'wordmark',
+  className = '',
+  alt = 'platy'
+}: Props) {
+  if (variant === 'icon') {
+    return (
       <Image
-        src="/brand/PLATY_wordmark_1800.png"
-        alt="platy — Menús inteligentes, ahorro real"
-        width={240}
-        height={64}
+        src="/brand/PLATY_logo_icon_1024.png"
+        alt={alt}
+        width={36}
+        height={36}
         priority
-        className="h-10 w-auto md:h-12"
+        className={className}
       />
-    </Link>
+    )
+  }
+
+  if (variant === 'lockup') {
+    return (
+      <div className={`flex items-center gap-2 ${className}`}>
+        <Image
+          src="/brand/PLATY_logo_icon_1024.png"
+          alt={alt}
+          width={28}
+          height={28}
+          priority
+        />
+        <Image
+          src="/brand/PLATY_wordmark_1800.png"
+          alt={alt}
+          width={140}
+          height={32}
+          priority
+        />
+      </div>
+    )
+  }
+
+  // variant === 'wordmark'
+  return (
+    <Image
+      src="/brand/PLATY_wordmark_1800.png"
+      alt={alt}
+      width={160}
+      height={36}
+      priority
+      className={className}
+    />
   )
 }
 
