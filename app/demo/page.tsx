@@ -1,3 +1,5 @@
+'use client';  // Marca este componente como un componente de cliente
+
 import { useState, useMemo } from 'react'
 import Brand from '@/components/Brand'
 import Button from '@/components/Button'
@@ -177,4 +179,3 @@ export default function Page() {
     </main>
   )
 }
-
