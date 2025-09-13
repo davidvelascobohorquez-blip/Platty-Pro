@@ -1,5 +1,4 @@
 'use client'
-
 import { useMemo, useState } from 'react'
 import Brand from '@/components/Brand'
 import Button from '@/components/Button'
@@ -20,23 +19,16 @@ type Plan = {
   tiendas?: { sugerida: StoreOpt; opciones: StoreOpt[]; mapsUrl: string }
 }
 
-// -------------------- PDF Styles + helpers --------------------
 const styles = StyleSheet.create({
-  page: { padding: 36, fontSize: 11, fontFamily: 'Helvetica' },
-  header: { flexDirection:'row', justifyContent:'space-between', alignItems:'center', marginBottom: 12 },
-  brand: { width: 180 },
-  meta: { color:'#555' },
-  h1: { fontSize: 20, marginTop: 6, marginBottom: 4, fontFamily:'Helvetica-Bold' },
-  h2: { fontSize: 14, marginTop: 10, marginBottom: 6, fontFamily:'Helvetica-Bold' },
-  card: { borderWidth:1, borderColor:'#e6e6e6', borderRadius:8, padding:10, marginBottom:8 },
-  grid2: { flexDirection:'row', gap:8 },
-  col: { flex:1 },
-  row: { flexDirection:'row' },
-  th: { fontFamily:'Helvetica-Bold', backgroundColor:'#f7f7f7', padding:6, borderRightWidth:1, borderColor:'#e6e6e6' },
-  td: { padding:6, borderTopWidth:1, borderColor:'#efefef', borderRightWidth:1, borderRightColor:'#f2f2f2' },
-  right: { textAlign:'right' },
-  small: { fontSize:9, color:'#666' },
-  foot: { position:'absolute', bottom:24, left:36, right:36, flexDirection:'row', justifyContent:'space-between', alignItems:'center' }
+  page: { padding: 32, fontSize: 12, fontFamily: 'Helvetica' },
+  h1: { fontSize: 22, marginBottom: 8 },
+  h2: { fontSize: 16, marginTop: 12, marginBottom: 6 },
+  small: { fontSize: 10, color: '#555' },
+  listItem: { marginBottom: 4 },
+  table: { marginTop: 6, borderWidth: 1, borderColor: '#dddddd', borderRadius: 6, overflow: 'hidden' },
+  tr: { flexDirection: 'row', alignItems: 'stretch' },
+  th: { fontSize: 11, fontFamily: 'Helvetica-Bold', backgroundColor: '#f3f3f3', paddingVertical: 6, paddingHorizontal: 8, borderRightWidth: 1, borderRightColor: '#dddddd' },
+  td: { fontSize: 11, paddingVertical: 6, paddingHorizontal: 8, borderTopWidth: 1, borderTopColor: '#eeeeee', borderRightWidth: 1, borderRightColor: '#eeeeee' }
 })
 
 function fmtCOP(n?: number) {
@@ -45,128 +37,86 @@ function fmtCOP(n?: number) {
 }
 
 function PlanPDF({ plan }: { plan: Plan }) {
-  // aplanar lista de compras a filas [cat, item, qty, unit, est]
-  const rows: {cat:string; name:string; qty:number; unit:string; est?:number}[] = []
-  Object.entries(plan.lista || {}).forEach(([cat, items]) => {
-    (items || []).forEach((i) => rows.push({cat, name:i.name, qty:i.qty, unit:i.unit, est:i.estCOP}))
-  })
-
   return (
     <Document>
       <Page size="A4" style={styles.page}>
-        {/* Encabezado */}
-        <View style={styles.header}>
-          <PDFImage src="/brand/PLATY_wordmark_1800.png" style={styles.brand} />
-          <View>
-            <Text style={styles.meta}>{plan.meta.ciudad} · {plan.meta.modo} · {plan.meta.personas} pers</Text>
-            <Text style={styles.meta}>Incluye cantidades (g/ml/ud) y costo estimado por ciudad.</Text>
-          </View>
+        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10 }}>
+          <PDFImage src="/brand/PLATY_wordmark_1800.png" style={{ width: 240 }} />
         </View>
 
-        {/* Resumen / Tienda sugerida */}
-        <View style={[styles.grid2, { marginBottom: 6 }]}>
-          <View style={styles.col}>
-            <View style={styles.card}>
-              <Text style={styles.h2}>Resumen</Text>
-              <Text>Ciudad: {plan.meta.ciudad}</Text>
-              <Text>Personas: {plan.meta.personas}</Text>
-              <Text>Tiempo: {plan.meta.modo}</Text>
-            </View>
-          </View>
-          {plan.tiendas && (
-            <View style={styles.col}>
-              <View style={styles.card}>
-                <Text style={styles.h2}>Dónde comprar (sugerido)</Text>
-                <Text>• {plan.tiendas.sugerida.nombre} ({plan.tiendas.sugerida.tipo})</Text>
-                <Text>• Alternativas: {plan.tiendas.opciones.map((o)=>o.nombre).join(', ')}</Text>
-                <Text style={styles.small}>Maps: {plan.tiendas.mapsUrl}</Text>
-              </View>
-            </View>
-          )}
-        </View>
+        <Text style={styles.h1}>Menú semanal — {plan.meta.ciudad} · {plan.meta.modo} · {plan.meta.personas} pers</Text>
+        <Text style={styles.small}>Incluye lista consolidada, cantidades (g/ml/ud) y costo estimado.</Text>
 
-        {/* Menú */}
-        <Text style={styles.h1}>Menú · Días 1–7</Text>
-        {plan.menu.map((d) => (
-          <View key={d.dia} style={styles.card}>
-            <Text style={{ fontFamily:'Helvetica-Bold' }}>Día {d.dia}: {d.plato}</Text>
-            <Text>Ingredientes: {d.ingredientes.map((i)=>`${i.qty} ${i.unit} ${i.name}`).join('; ')}</Text>
-            <Text>Pasos: {d.pasos.join(' · ')}</Text>
-            <Text>Tip: {d.tip}</Text>
+        <Text style={styles.h2}>Menú (Día 1–7)</Text>
+        {plan.menu.map(d => (
+          <View key={d.dia} style={{ marginBottom: 8 }}>
+            <Text>• Día {d.dia}: {d.plato}</Text>
+            <Text>  Ingredientes: {d.ingredientes.map(i => `${i.qty} ${i.unit} ${i.name}`).join('; ')}</Text>
+            <Text>  Pasos: {d.pasos.join(' | ')}</Text>
+            <Text>  Tip: {d.tip}</Text>
           </View>
         ))}
 
-        {/* Lista de compras en tabla */}
-        <Text style={styles.h1}>Lista de compras (consolidada)</Text>
-        <View style={{ borderWidth:1, borderColor:'#e6e6e6', borderRadius:8, overflow:'hidden' }}>
-          <View style={styles.row}>
-            <Text style={[styles.th, {flex:1}]}>Categoría</Text>
-            <Text style={[styles.th, {flex:2}]}>Producto</Text>
-            <Text style={[styles.th, {flex:1, textAlign:'right'}]}>Cantidad</Text>
-            <Text style={[styles.th, {flex:1, textAlign:'right'}]}>Est. COP</Text>
-          </View>
-          {rows.map((r, idx) => (
-            <View key={idx} style={styles.row}>
-              <Text style={[styles.td, {flex:1}]}>{r.cat}</Text>
-              <Text style={[styles.td, {flex:2}]}>{r.name}</Text>
-              <Text style={[styles.td, {flex:1, textAlign:'right'}]}>{r.qty} {r.unit}</Text>
-              <Text style={[styles.td, {flex:1, textAlign:'right'}]}>{fmtCOP(r.est)}</Text>
-            </View>
-          ))}
-        </View>
+        <Text style={styles.h2}>Lista de compras (consolidada)</Text>
+        {Object.entries(plan.lista).map(([cat, items]) => (
+          <Text key={cat} style={styles.listItem}>{cat}: {items.map(i => `${i.qty} ${i.unit} ${i.name}`).join('; ')}</Text>
+        ))}
 
-        {/* Costos por categoría */}
         {plan.costos && (
           <>
-            <Text style={styles.h1}>Costos estimados</Text>
-            <View style={{ borderWidth:1, borderColor:'#e6e6e6', borderRadius:8, overflow:'hidden' }}>
-              <View style={styles.row}>
-                <Text style={[styles.th, {flex:2}]}>Categoría</Text>
-                <Text style={[styles.th, {flex:1, textAlign:'right'}]}>COP</Text>
+            <Text style={styles.h2}>Costo estimado</Text>
+            <View style={styles.table}>
+              <View style={styles.tr}>
+                <Text style={[styles.th, { flex: 2 }]}>Categoría</Text>
+                <Text style={[styles.th, { flex: 1, textAlign: 'right' }]}>Estimado (COP)</Text>
               </View>
               {Object.entries(plan.costos.porCategoria).map(([cat, val]) => (
-                <View key={cat} style={styles.row}>
-                  <Text style={[styles.td, {flex:2}]}>{cat}</Text>
-                  <Text style={[styles.td, {flex:1, textAlign:'right'}]}>{fmtCOP(val as number)}</Text>
+                <View key={cat} style={styles.tr}>
+                  <Text style={[styles.td, { flex: 2 }]}>{cat}</Text>
+                  <Text style={[styles.td, { flex: 1, textAlign: 'right' }]}>{fmtCOP(val)}</Text>
                 </View>
               ))}
-              <View style={styles.row}>
-                <Text style={[styles.td, {flex:2, fontFamily:'Helvetica-Bold'}]}>Total</Text>
-                <Text style={[styles.td, {flex:1, textAlign:'right', fontFamily:'Helvetica-Bold'}]}>
-                  {fmtCOP(plan.costos.total)}
-                </Text>
+              <View style={styles.tr}>
+                <Text style={[styles.td, { flex: 2, fontFamily: 'Helvetica-Bold' }]}>Total</Text>
+                <Text style={[styles.td, { flex: 1, textAlign: 'right', fontFamily: 'Helvetica-Bold' }]}>{fmtCOP(plan.costos.total)}</Text>
               </View>
             </View>
-            <Text style={[styles.small, { marginTop: 4 }]}>* {plan.costos.nota}</Text>
+            <Text style={[styles.small, { marginTop: 4 }]}>{plan.costos.nota}</Text>
           </>
         )}
 
-        {/* Footer */}
-        <View style={styles.foot}>
-          <Text style={styles.small}>© {new Date().getFullYear()} {site.brand} · {site.domain}</Text>
-          <PDFImage src="/brand/PLATY_logo_icon_1024.png" style={{ width: 22, height: 22 }} />
+        {plan.tiendas && (
+          <>
+            <Text style={styles.h2}>Dónde comprar (sugerido)</Text>
+            <Text>• Sugerido: {plan.tiendas.sugerida.nombre} ({plan.tiendas.sugerida.tipo})</Text>
+            <Text>• Alternativas: {plan.tiendas.opciones.map(o=>o.nombre).join(', ')}</Text>
+            <Text style={styles.small}>Búscalo en mapas: {plan.tiendas.mapsUrl}</Text>
+          </>
+        )}
+
+        <View style={{ position: 'absolute', bottom: 24, left: 32, right: 32, flexDirection:'row', justifyContent:'space-between' }}>
+          <Text style={styles.small}>{site.brand} · wa.me/{site.whatsapp} · {site.domain}</Text>
+          <PDFImage src="/brand/PLATY_logo_icon_1024.png" style={{ width: 28, height: 28 }} />
         </View>
       </Page>
     </Document>
   )
 }
 
-// -------------------- DEMO PAGE --------------------
 export default function DemoPage() {
   const [step, setStep] = useState(1)
   const total = 4
-
   const [ciudad, setCiudad] = useState('Bogotá, CO')
   const [personas, setPersonas] = useState(2)
   const [modo, setModo] = useState<'30 min'|'45 min'|'Sin preferencia'>('30 min')
   const [equipo, setEquipo] = useState<'Todo ok'|'Sin horno'|'Sin licuadora'>('Sin horno')
   const [prefs, setPrefs] = useState<string[]>(['Económico'])
-
   const [plan, setPlan] = useState<Plan | null>(null)
   const [email, setEmail] = useState('')
   const [sending, setSending] = useState(false)
-
   const ready = step > total
+
+  const pct = Math.max(0, Math.min(1, (Math.min(step, total) - 1) / (total - 1))) * 100
 
   async function generarPlan() {
     const res = await fetch('/api/generate-menu', {
@@ -197,7 +147,7 @@ export default function DemoPage() {
       })
       const j = await res.json()
       alert(j.ok ? 'Enviado ✅ Revisa tu correo.' : `No se pudo enviar: ${j.error || 'Error'}`)
-    } catch {
+    } catch (e:any) {
       alert('Error enviando email')
     } finally {
       setSending(false)
@@ -206,10 +156,23 @@ export default function DemoPage() {
 
   return (
     <main className="container py-10">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-8">
-        <Brand />
-        <StepperDots step={Math.min(step, total)} total={total} />
+      {/* Header + progreso */}
+      <div className="mb-6">
+        <div className="flex items-center justify-between">
+          <Brand />
+          <div className="hidden md:block">
+            <StepperDots step={Math.min(step, total)} total={total} />
+          </div>
+        </div>
+        {/* Progreso móvil */}
+        <div className="md:hidden mt-4">
+          <div className="h-1 w-full bg-line rounded-full overflow-hidden">
+            <div
+              className="h-1 bg-amber rounded-full transition-[width] duration-300"
+              style={{ width: `${pct}%` }}
+            />
+          </div>
+        </div>
       </div>
 
       {/* Volver */}
@@ -224,117 +187,119 @@ export default function DemoPage() {
 
       {/* Pasos */}
       {step <= total && (
-        <div className="grid md:grid-cols-2 gap-6" style={{ animation: 'fadeIn .25s ease' }}>
-          {/* Paso 1 */}
-          {step === 1 && (
-            <div className="bg-card rounded-3xl shadow-soft border border-line p-6">
-              <h2 className="text-2xl font-bold">¿En qué ciudad/país estás?</h2>
-              <p className="text-sm text-stone mt-1">Usamos tu ciudad para estimar precios locales.</p>
-              <input
-                className="mt-4 w-full rounded-2xl border border-line px-4 py-3"
-                value={ciudad}
-                onChange={e=>setCiudad(e.target.value)}
-                placeholder="Ej: Bogotá, CO"
-              />
-              <div className="mt-6 flex gap-3">
-                <Button onClick={()=>setStep(2)}>Siguiente</Button>
+        <>
+          <div className="grid md:grid-cols-2 gap-6" style={{ animation: 'fadeIn .25s ease' }}>
+            {step === 1 && (
+              <div className="bg-card rounded-3xl shadow-soft border border-line p-6">
+                <h2 className="text-2xl font-bold">¿En qué ciudad/país estás?</h2>
+                <p className="text-sm text-stone mt-1">Usamos tu ciudad para estimar precios locales.</p>
+                <input
+                  className="mt-4 w-full rounded-2xl border border-line px-4 py-3"
+                  value={ciudad}
+                  onChange={e=>setCiudad(e.target.value)}
+                  placeholder="Ej: Bogotá, CO"
+                />
+                <div className="mt-6 flex gap-3"><Button onClick={()=>setStep(2)}>Siguiente</Button></div>
               </div>
-            </div>
-          )}
+            )}
 
-          {/* Paso 2 */}
-          {step === 2 && (
-            <div className="bg-card rounded-3xl shadow-soft border border-line p-6">
-              <h2 className="text-2xl font-bold">¿Para cuántas personas?</h2>
-              <p className="text-sm text-stone mt-1">El plan escalará cantidades (g/ml/ud) según tu elección.</p>
-              <div className="mt-4 flex flex-wrap gap-2">
-                {[1,2,3,4,5,6].map(n => (
-                  <button
-                    key={n}
-                    onClick={()=>setPersonas(n)}
-                    className={`px-4 py-2 rounded-2xl border transition-colors ${personas===n?'bg-amber border-amber text-charcoal':'border-line hover:border-amber'}`}
-                  >{n}</button>
-                ))}
-              </div>
-              <div className="mt-6 flex gap-3">
-                <Button onClick={()=>setStep(3)}>Siguiente</Button>
-              </div>
-            </div>
-          )}
-
-          {/* Paso 3 */}
-          {step === 3 && (
-            <div className="bg-card rounded-3xl shadow-soft border border-line p-6">
-              <h2 className="text-2xl font-bold">Tiempo y equipo</h2>
-              <p className="text-sm text-stone mt-1">Selecciona <strong>una</strong> opción por línea.</p>
-              <div className="mt-4 grid grid-cols-3 gap-2">
-                {['30 min','45 min','Sin preferencia'].map(m => (
-                  <button
-                    key={m}
-                    onClick={()=>setModo(m as any)}
-                    className={`px-4 py-2 rounded-2xl border transition-colors ${modo===m?'bg-amber border-amber text-charcoal':'border-line hover:border-amber'}`}
-                  >{m}</button>
-                ))}
-              </div>
-              <div className="mt-4 grid grid-cols-3 gap-2">
-                {['Todo ok','Sin horno','Sin licuadora'].map(m => (
-                  <button
-                    key={m}
-                    onClick={()=>setEquipo(m as any)}
-                    className={`px-4 py-2 rounded-2xl border transition-colors ${equipo===m?'bg-amber border-amber text-charcoal':'border-line hover:border-amber'}`}
-                  >{m}</button>
-                ))}
-              </div>
-              <div className="mt-6 flex gap-3">
-                <Button onClick={()=>setStep(4)}>Siguiente</Button>
-              </div>
-            </div>
-          )}
-
-          {/* Paso 4 */}
-          {step === 4 && (
-            <div className="bg-card rounded-3xl shadow-soft border border-line p-6">
-              <h2 className="text-2xl font-bold">Preferencias y presupuesto</h2>
-              <p className="text-sm text-stone mt-1">Puedes seleccionar <strong>varias</strong> opciones.</p>
-              <div className="mt-4 grid grid-cols-2 gap-2">
-                {['Económico','Vegetariano','Sin lácteos','Sin picante','Bajo sodio','Ninguna'].map(p => {
-                  const on = prefs.includes(p)
-                  return (
+            {step === 2 && (
+              <div className="bg-card rounded-3xl shadow-soft border border-line p-6">
+                <h2 className="text-2xl font-bold">¿Para cuántas personas?</h2>
+                <p className="text-sm text-stone mt-1">El plan escalará cantidades (g/ml/ud) según tu elección.</p>
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {[1,2,3,4,5,6].map(n => (
                     <button
-                      key={p}
-                      onClick={()=>setPrefs(on?prefs.filter(x=>x!==p):[...prefs,p])}
-                      className={`px-4 py-2 rounded-2xl border text-left transition-colors ${on?'bg-amber border-amber text-charcoal':'border-line hover:border-amber'}`}
-                    >
-                      {p}
-                    </button>
-                  )
-                })}
+                      key={n}
+                      onClick={()=>setPersonas(n)}
+                      className={`px-4 py-2 rounded-2xl border transition-colors ${personas===n?'bg-amber border-amber text-charcoal':'border-line hover:border-amber'}`}
+                    >{n}</button>
+                  ))}
+                </div>
+                <div className="mt-6 flex gap-3"><Button onClick={()=>setStep(3)}>Siguiente</Button></div>
               </div>
-              <div className="mt-6 flex gap-3">
-                <Button onClick={generarPlan}>Confirmar y generar plan</Button>
-              </div>
-            </div>
-          )}
+            )}
 
-          {/* Resumen lateral */}
-          <div className="bg-card rounded-3xl shadow-soft border border-line p-6">
-            <h3 className="text-xl font-bold">Resumen</h3>
-            <ul className="mt-3 text-graphite">
-              <li>Ciudad: {ciudad}</li>
-              <li>Personas: {personas}</li>
-              <li>Modo: {modo}</li>
-              <li>Equipo: {equipo}</li>
-              <li>Prefs: {prefs.join(', ') || '—'}</li>
-            </ul>
-            <p className="text-sm text-stone mt-3">Generamos 7 almuerzos/cenas con cantidades, lista consolidada y costo estimado por ciudad.</p>
+            {step === 3 && (
+              <div className="bg-card rounded-3xl shadow-soft border border-line p-6">
+                <h2 className="text-2xl font-bold">Tiempo y equipo</h2>
+                <p className="text-sm text-stone mt-1">Selecciona <strong>una</strong> opción por línea.</p>
+                <div className="mt-4 grid grid-cols-3 gap-2">
+                  {['30 min','45 min','Sin preferencia'].map(m => (
+                    <button
+                      key={m}
+                      onClick={()=>setModo(m as any)}
+                      className={`px-4 py-2 rounded-2xl border transition-colors ${modo===m?'bg-amber border-amber text-charcoal':'border-line hover:border-amber'}`}
+                    >{m}</button>
+                  ))}
+                </div>
+                <div className="mt-4 grid grid-cols-3 gap-2">
+                  {['Todo ok','Sin horno','Sin licuadora'].map(m => (
+                    <button
+                      key={m}
+                      onClick={()=>setEquipo(m as any)}
+                      className={`px-4 py-2 rounded-2xl border transition-colors ${equipo===m?'bg-amber border-amber text-charcoal':'border-line hover:border-amber'}`}
+                    >{m}</button>
+                  ))}
+                </div>
+                {/* CTA desktop (en su tarjeta) */}
+                <div className="mt-6 hidden md:flex gap-3"><Button onClick={()=>setStep(4)}>Siguiente</Button></div>
+              </div>
+            )}
+
+            {step === 4 && (
+              <div className="bg-card rounded-3xl shadow-soft border border-line p-6">
+                <h2 className="text-2xl font-bold">Preferencias y presupuesto</h2>
+                <p className="text-sm text-stone mt-1">Puedes seleccionar <strong>varias</strong> opciones.</p>
+                <div className="mt-4 grid grid-cols-2 gap-2">
+                  {['Económico','Vegetariano','Sin lácteos','Sin picante','Bajo sodio','Ninguna'].map(p => {
+                    const on = prefs.includes(p)
+                    return (
+                      <button
+                        key={p}
+                        onClick={()=>setPrefs(on?prefs.filter(x=>x!==p):[...prefs,p])}
+                        className={`px-4 py-2 rounded-2xl border text-left transition-colors ${on?'bg-amber border-amber text-charcoal':'border-line hover:border-amber'}`}
+                      >
+                        {p}
+                      </button>
+                    )
+                  })}
+                </div>
+                {/* CTA desktop dentro de la tarjeta */}
+                <div className="mt-6 hidden md:flex gap-3"><Button onClick={generarPlan}>Confirmar y generar plan</Button></div>
+              </div>
+            )}
+
+            {/* Resumen */}
+            <div className="bg-card rounded-3xl shadow-soft border border-line p-6">
+              <h3 className="text-xl font-bold">Resumen</h3>
+              <ul className="mt-3 text-graphite">
+                <li>Ciudad: {ciudad}</li>
+                <li>Personas: {personas}</li>
+                <li>Modo: {modo}</li>
+                <li>Equipo: {equipo}</li>
+                <li>Prefs: {prefs.join(', ') || '—'}</li>
+              </ul>
+              <p className="text-sm text-stone mt-3">Generamos 7 almuerzos/cenas con cantidades, lista consolidada y costo estimado por ciudad.</p>
+              {/* CTA móvil: debajo del resumen */}
+              {step === 4 && (
+                <div className="md:hidden mt-4">
+                  <Button onClick={generarPlan} aria-label="Confirmar y generar plan (móvil)">Confirmar y generar plan</Button>
+                </div>
+              )}
+              {step === 3 && (
+                <div className="md:hidden mt-4">
+                  <Button onClick={()=>setStep(4)} aria-label="Siguiente (móvil)">Siguiente</Button>
+                </div>
+              )}
+            </div>
           </div>
-        </div>
+        </>
       )}
 
       {/* Resultado */}
       {ready && plan && (
         <div className="grid gap-6" style={{ animation: 'fadeIn .25s ease' }}>
-          {/* Menú */}
           <div className="bg-card rounded-3xl shadow-soft border border-line p-6">
             <h2 className="text-2xl font-extrabold">Menú (Día 1–7)</h2>
             <div className="mt-4 grid md:grid-cols-2 gap-4">
@@ -382,19 +347,15 @@ export default function DemoPage() {
             </div>
           )}
 
-          {/* Acciones: PDF / Whats / Email */}
           <div className="bg-card rounded-3xl shadow-soft border border-line p-6">
             <div className="font-semibold">Batch cooking</div>
             <div className="text-graphite text-sm">Base A: {plan.batch.baseA}</div>
             <div className="text-graphite text-sm">Base B: {plan.batch.baseB}</div>
-
             <div className="mt-6 flex flex-wrap gap-3">
               <PDFDownloadLink document={<PlanPDF plan={plan}/>} fileName={`PLATY_menu_${plan.meta.ciudad}.pdf`}>
                 {({ loading }) => <Button disabled={loading}>{loading ? 'Generando PDF…' : 'Descargar PDF'}</Button>}
               </PDFDownloadLink>
-              <a href={whatsUrl} target="_blank" rel="noreferrer">
-                <Button>Compartir por WhatsApp</Button>
-              </a>
+              <a href={whatsUrl} target="_blank" rel="noreferrer"><Button>Compartir por WhatsApp</Button></a>
             </div>
 
             {/* Enviar por email */}
@@ -406,16 +367,13 @@ export default function DemoPage() {
                 value={email}
                 onChange={e=>setEmail(e.target.value)}
               />
-              <Button onClick={enviarEmail} disabled={sending || !email}>
-                {sending ? 'Enviando…' : 'Enviar por email'}
-              </Button>
+              <Button onClick={enviarEmail} disabled={sending || !email}>Enviar por email</Button>
             </div>
             <p className="text-xs text-stone mt-2">Te enviaremos el PDF generado a tu correo.</p>
           </div>
         </div>
       )}
 
-      {/* Animación global */}
       <style jsx global>{`
         @keyframes fadeIn { from { opacity: 0; transform: translateY(6px);} to {opacity:1; transform:none;} }
       `}</style>
