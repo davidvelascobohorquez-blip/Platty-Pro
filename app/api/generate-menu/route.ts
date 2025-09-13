@@ -1,5 +1,5 @@
-// ...otros imports
 import { NextRequest, NextResponse } from 'next/server'
+import { cookies } from 'next/headers'
 import OpenAI from 'openai'
 import pricebookCO from '@/data/pricebook.co.json' assert { type: 'json' }
 
@@ -9,7 +9,7 @@ type Unit = 'g' | 'ml' | 'ud'
 type ItemQty = { name: string; qty: number; unit: Unit; estCOP?: number }
 type Plan = {
   menu: { dia: number; plato: string; ingredientes: ItemQty[]; pasos: string[]; tip: string }[]
-  lista: Record<string, ItemQty[]> // Aquí debe ser un objeto con categorías y sus respectivos items
+  lista: Record<string, ItemQty[]>
   batch: { baseA: string; baseB: string }
   sobrantes: string[]
   meta: { ciudad: string; personas: number; modo: string; moneda: 'COP' }
@@ -116,7 +116,7 @@ export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({} as any))
   const { ciudad = 'Bogotá', personas = 2, modo = '30 min', equipo = 'Todo ok', prefs = ['Económico'] } = body || {}
 
-  const store = cookies()
+  const store = cookies() // Aquí ya está la importación de cookies
   const trialsCookie = store.get('platy_trials')?.value
   const trials = Number(trialsCookie || 0)
   const licenseHeader = req.headers.get('x-platy-license') || store.get('platy_license')?.value
@@ -187,7 +187,7 @@ Respeta exactamente este schema: ${JSON.stringify(schema)}`
         }
         const subtotal = Object.values(porCategoria).reduce((a, b) => a + b, 0)
         base.lista = lista
-        base.costos = { porCategoria, total: toCOP(subtotal * 1.10), nota: 'Estimado con pricebook local (+10% buffer). Puede variar por tienda/temporada.' }
+        base.costos = { porCategoria, total: toCOP(subtotal * 1.10), nota: 'Estimado con Pricebook local (+10% buffer). Puede variar por tienda/temporada.' }
       }
 
       const res = NextResponse.json(base, { headers: { 'x-platy-has-license': String(hasLicense), 'x-platy-trials': String(trials) } })
@@ -203,3 +203,4 @@ Respeta exactamente este schema: ${JSON.stringify(schema)}`
   else res.cookies.set('platy_trials', String(trials + 1), { httpOnly: true, sameSite: 'lax', maxAge: 60 * 60 * 24 * 365 })
   return res
 }
+
