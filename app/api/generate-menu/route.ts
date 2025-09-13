@@ -1,3 +1,4 @@
+// app/api/generate-menu/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import OpenAI from 'openai'
@@ -19,15 +20,48 @@ type Plan = {
 const TRIALS_FREE = 3
 const toCOP = (n:number) => Math.round(n)
 
+/* ──────────────────────────────────────────────────────────────────────────
+   Normalización de nombres para que coincidan con el pricebook
+   ────────────────────────────────────────────────────────────────────────── */
+const NAME_ALIASES: Record<string, string> = {
+  // proteínas
+  'pechuga de pollo': 'pollo pechuga',
+  'pollo': 'pollo pechuga',
+  'carne molida': 'res molida',
+  'res': 'res molida',
+  'lomo de cerdo': 'cerdo',
+  'cerdo molido': 'cerdo',
+  'atun': 'atún',
+  'atun en lata': 'atún',
+  // verduras / varios
+  'pimenton': 'pimentón',
+  'broccoli': 'brocoli',
+  // panes/tortillas
+  'tortillas': 'tortilla',
+}
+
+function stripAccents(s: string) {
+  return s.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+}
+function normalizeName(name: string) {
+  const key = stripAccents(name).toLowerCase().trim()
+  const mapped = NAME_ALIASES[key]
+  return mapped ?? name
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+   Precios
+   ────────────────────────────────────────────────────────────────────────── */
 function cityMultiplier(ciudad: string) {
-  const c = ciudad.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+  const c = stripAccents(ciudad)
   const key = Object.keys((pricebookCO as any).cityMultipliers).find(k =>
     c.toLowerCase().includes(k.toLowerCase())
   )
   return key ? (pricebookCO as any).cityMultipliers[key] : 1.0
 }
 function unitPriceCOP(name: string, ciudad: string): { perGram?: number; perMl?: number; perUnit?: number } {
-  const info = (pricebookCO as any).ingredients[name]
+  const canon = normalizeName(name)
+  const info = (pricebookCO as any).ingredients[canon]
   if (!info) return {}
   const mult = cityMultiplier(ciudad)
   const base = info.price * mult
@@ -43,12 +77,14 @@ function estimateItemCOP(it: ItemQty, ciudad: string) {
   if (it.unit === 'ud' && p.perUnit) return it.qty * p.perUnit
   return undefined
 }
+
+/* ────────────────────────────────────────────────────────────────────────── */
 function consolidate(items: ItemQty[]) {
   const map = new Map<string, ItemQty>()
   for (const it of items) {
-    const key = `${it.name}__${it.unit}`
+    const key = `${normalizeName(it.name)}__${it.unit}`
     const prev = map.get(key)
-    if (!prev) map.set(key, { ...it })
+    if (!prev) map.set(key, { ...it, name: normalizeName(it.name) })
     else prev.qty += it.qty
   }
   return [...map.values()]
@@ -58,26 +94,29 @@ function friendlyQty(q: number, u: Unit) {
   return Math.round(q)
 }
 
+/* ──────────────────────────────────────────────────────────────────────────
+   Fallback (offline) — ahora con variedad de proteínas
+   ────────────────────────────────────────────────────────────────────────── */
 function fallbackPlan(ciudad: string, personas: number, modo: string): Plan {
   const base = [
     { dia: 1, plato: 'Arroz con pollo', receta: [{n:'arroz',u:'g',pp:90},{n:'pollo pechuga',u:'g',pp:140},{n:'tomate',u:'g',pp:80},{n:'cebolla',u:'g',pp:60},{n:'ajo',u:'g',pp:6},{n:'aceite',u:'ml',pp:8}] },
-    { dia: 2, plato: 'Pasta con tomate', receta: [{n:'pasta',u:'g',pp:100},{n:'tomate',u:'g',pp:120},{n:'cebolla',u:'g',pp:50},{n:'ajo',u:'g',pp:6},{n:'aceite',u:'ml',pp:8}] },
+    { dia: 2, plato: 'Pasta con res molida', receta: [{n:'pasta',u:'g',pp:100},{n:'res molida',u:'g',pp:130},{n:'tomate',u:'g',pp:120},{n:'cebolla',u:'g',pp:50},{n:'ajo',u:'g',pp:6},{n:'aceite',u:'ml',pp:8}] },
     { dia: 3, plato: 'Arepa con queso y huevo', receta: [{n:'arepa',u:'ud',pp:1},{n:'queso',u:'g',pp:40},{n:'huevo',u:'ud',pp:1}] },
-    { dia: 4, plato: 'Salteado de verduras', receta: [{n:'brocoli',u:'g',pp:120},{n:'zanahoria',u:'g',pp:100},{n:'pimentón',u:'g',pp:80},{n:'cebolla',u:'g',pp:60},{n:'aceite',u:'ml',pp:10}] },
-    { dia: 5, plato: 'Sopa casera', receta: [{n:'zanahoria',u:'g',pp:80},{n:'papa',u:'g',pp:150},{n:'cebolla',u:'g',pp:50},{n:'ajo',u:'g',pp:6}] },
-    { dia: 6, plato: 'Tacos rápidos', receta: [{n:'tortilla',u:'ud',pp:2},{n:'pollo pechuga',u:'g',pp:120},{n:'pimentón',u:'g',pp:60},{n:'cebolla',u:'g',pp:50}] },
+    { dia: 4, plato: 'Salteado de cerdo y verduras', receta: [{n:'cerdo',u:'g',pp:140},{n:'brocoli',u:'g',pp:120},{n:'zanahoria',u:'g',pp:100},{n:'pimentón',u:'g',pp:80},{n:'cebolla',u:'g',pp:60},{n:'aceite',u:'ml',pp:10}] },
+    { dia: 5, plato: 'Sopa casera de verduras', receta: [{n:'zanahoria',u:'g',pp:80},{n:'papa',u:'g',pp:150},{n:'cebolla',u:'g',pp:50},{n:'ajo',u:'g',pp:6}] },
+    { dia: 6, plato: 'Tacos de atún', receta: [{n:'tortilla',u:'ud',pp:2},{n:'atún',u:'g',pp:100},{n:'pimentón',u:'g',pp:60},{n:'cebolla',u:'g',pp:50}] },
     { dia: 7, plato: 'Arroz frito con sobrantes', receta: [{n:'arroz',u:'g',pp:70},{n:'zanahoria',u:'g',pp:60},{n:'cebolla',u:'g',pp:40},{n:'huevo',u:'ud',pp:1}] }
   ]
   const menu = base.map(d => {
     const ingredientes: ItemQty[] = d.receta.map(r => ({
-      name: r.n, unit: r.u as Unit, qty: friendlyQty(r.pp * personas, r.u as Unit)
+      name: normalizeName(r.n), unit: r.u as Unit, qty: friendlyQty(r.pp * personas, r.u as Unit)
     }))
     return { dia: d.dia, plato: d.plato, ingredientes, pasos: ['Picar','Saltear','Cocer','Servir'], tip: 'Aprovecha bases para otros días' }
   })
 
   const cats: Record<string,string[]> = {
     Verduras:['tomate','cebolla','pimentón','zanahoria','brocoli','papa'],
-    Proteína:['pollo pechuga','huevo','queso'],
+    Proteína:['pollo pechuga','huevo','queso','res molida','cerdo','atún'],
     Granos:['arroz','pasta','tortilla','arepa'],
     Abarrotes:['aceite','ajo']
   }
@@ -107,6 +146,9 @@ function fallbackPlan(ciudad: string, personas: number, modo: string): Plan {
   }
 }
 
+/* ──────────────────────────────────────────────────────────────────────────
+   Handler
+   ────────────────────────────────────────────────────────────────────────── */
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(()=> ({} as any))
   const { ciudad='Bogotá', personas=2, modo='30 min', equipo='Todo ok', prefs=['Económico'] } = body || {}
@@ -127,6 +169,7 @@ export async function POST(req: NextRequest) {
   try {
     if (process.env.OPENAI_API_KEY) {
       const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
+
       const schema = {
         type:'object', properties:{
           menu:{type:'array',items:{type:'object',properties:{
@@ -141,9 +184,11 @@ export async function POST(req: NextRequest) {
 
       const prompt = `Eres chef planificador para ${personas} personas en ${ciudad}, tiempo ${modo}, equipo ${equipo}, preferencias: ${prefs.join(', ')}.
 Devuelve JSON con 7 días (menu[].dia 1..7), plato y lista de ingredientes con cantidades YA ESCALADAS (qty) y unit en g/ml/ud.
+Varía proteínas a lo largo de la semana (p. ej. pollo, res, cerdo, pescado/atún, huevo/legumbres). Evita repetir más de 2 veces la misma proteína principal.
+Usa nombres de ingredientes simples y normalizados (ej: "pollo pechuga", "res molida", "cerdo", "atún", "huevo", "queso", "pasta", "arroz", "tomate", "cebolla", "pimentón", "zanahoria", "brocoli", "papa", "aceite", "ajo").
 Respeta exactamente este schema: ${JSON.stringify(schema)}`
 
-      // ===== FIX: usar Chat Completions en lugar de Responses =====
+      // Chat Completions (v4.55.0) con salida JSON
       const chat = await openai.chat.completions.create({
         model: 'gpt-4o-mini',
         temperature: 0.4,
@@ -157,18 +202,36 @@ Respeta exactamente este schema: ${JSON.stringify(schema)}`
       const content = chat.choices?.[0]?.message?.content?.trim() || '{}'
       let ai: any = {}
       try { ai = JSON.parse(content) } catch { ai = {} }
-      // ============================================================
 
+      // Base de seguridad
       const base = fallbackPlan(ciudad, personas, modo)
+
       if (ai?.menu?.length === 7) {
-        base.menu = ai.menu
-        const all = consolidate(base.menu.flatMap((m:any)=>m.ingredientes)).map((it:any)=>({...it, qty: friendlyQty(it.qty, it.unit)}))
+        // Normaliza ingredientes del modelo
+        base.menu = ai.menu.map((d: any) => ({
+          dia: d.dia,
+          plato: d.plato,
+          ingredientes: (d.ingredientes || []).map((i: any) => ({
+            name: normalizeName(i.name),
+            unit: i.unit as Unit,
+            qty: friendlyQty(Number(i.qty) || 0, i.unit as Unit)
+          })),
+          pasos: Array.isArray(d.pasos) ? d.pasos : ['Preparar', 'Cocinar', 'Servir'],
+          tip: typeof d.tip === 'string' ? d.tip : 'Aprovecha bases para otros días'
+        }))
+
+        // Consolidación + costos
+        const all = consolidate(base.menu.flatMap((m:any)=>m.ingredientes)).map((it:any)=>({
+          ...it, qty: friendlyQty(it.qty, it.unit)
+        }))
+
         const cats: Record<string,string[]> = {
           Verduras:['tomate','cebolla','pimentón','zanahoria','brocoli','papa'],
-          Proteína:['pollo pechuga','huevo','queso'],
+          Proteína:['pollo pechuga','huevo','queso','res molida','cerdo','atún'],
           Granos:['arroz','pasta','tortilla','arepa'],
           Abarrotes:['aceite','ajo']
         }
+
         const lista: Record<string,ItemQty[]> = {}
         for (const it of all) {
           const cat = Object.keys(cats).find(k => cats[k].includes(it.name)) || 'Otros'
@@ -176,26 +239,36 @@ Respeta exactamente este schema: ${JSON.stringify(schema)}`
           const est = estimateItemCOP(it, ciudad)
           lista[cat].push({...it, estCOP: est!==undefined ? toCOP(est) : undefined})
         }
+
         const porCategoria: Record<string,number> = {}
         for (const [cat, items] of Object.entries(lista)) {
           porCategoria[cat] = toCOP(items.reduce((acc,i)=>acc+(i.estCOP||0),0))
         }
         const subtotal = Object.values(porCategoria).reduce((a,b)=>a+b,0)
+
         base.lista = lista
-        base.costos = { porCategoria, total: toCOP(subtotal*1.10), nota: 'Estimado con pricebook local (+10% buffer). Puede variar por tienda/temporada.' }
+        base.costos = {
+          porCategoria,
+          total: toCOP(subtotal*1.10),
+          nota: 'Estimado con pricebook local (+10% buffer). Puede variar por tienda/temporada.'
+        }
       }
 
-      const res = NextResponse.json(base, { headers: { 'x-platy-has-license': String(hasLicense), 'x-platy-trials': String(trials) } })
+      const res = NextResponse.json(base, {
+        headers: { 'x-platy-has-license': String(hasLicense), 'x-platy-trials': String(trials) }
+      })
       if (hasLicense) res.cookies.set('platy_license', licenseHeader!, { httpOnly:true, sameSite:'lax', maxAge: 60*60*24*365 })
       else res.cookies.set('platy_trials', String(trials+1), { httpOnly:true, sameSite:'lax', maxAge: 60*60*24*365 })
       return res
     }
-  } catch {}
+  } catch {
+    // continúa al fallback
+  }
 
+  // Fallback offline
   const plan = fallbackPlan(ciudad, personas, modo)
   const res = NextResponse.json(plan, { headers: { 'x-platy-has-license': String(hasLicense), 'x-platy-trials': String(trials) } })
   if (hasLicense) res.cookies.set('platy_license', licenseHeader!, { httpOnly:true, sameSite:'lax', maxAge: 60*60*24*365 })
   else res.cookies.set('platy_trials', String(trials+1), { httpOnly:true, sameSite:'lax', maxAge: 60*60*24*365 })
   return res
 }
-
